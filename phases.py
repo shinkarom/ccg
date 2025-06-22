@@ -10,19 +10,6 @@ MAX_HAND_SIZE = 7
 # A fixed size is important for a predictable state structure.
 BOARD_SIZE = 7
 
-def _end_turn_sequence(state: GameState) -> GameState:
-    state.current_player_index = 1 - state.current_player_index
-    new_player = state.players[state.current_player_index]
-    state.turn_number += 1
-    new_player.max_resource = min(10, new_player.max_resource + 1)
-    new_player.resource = new_player.max_resource
-    for unit in new_player.board:
-        if unit: unit.is_ready = True
-    if new_player.deck: new_player.hand.append(new_player.deck.pop())
-    # The new turn starts in the 'ACTION' phase
-    state.current_phase = 'MAIN' 
-    return state
-
 # --- Base Class ---
 class Phase(ABC):
     """An abstract base class for a phase in the game."""

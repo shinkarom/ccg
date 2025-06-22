@@ -22,29 +22,26 @@ def render_game_state(state: GameState, human_player_index: int):
     player = state.players[human_player_index]
     opponent = state.players[1 - human_player_index]
     is_my_turn = (state.current_player_index == human_player_index)
+    score1,score2 = state.get_score()
+    myscore = score1 if state.current_player_index == 0 else score2
+    oppscore = score2 if state.current_player_index == 1 else score1
 
     print("="*50)
     print(f"--- OPPONENT'S SIDE (Player {1 - human_player_index + 1}) ---")
-    print(f"HP: {opponent.health} | Resources: {opponent.resource} | Hand: {len(opponent.hand)}")
+    print(f"HP: {opponent.health} | Resources: {opponent.resource} | Hand: {len(opponent.hand)} | Score: {oppscore}")
     print("Board:")
     for i, unit in enumerate(opponent.board):
-        if unit:
-            card = CARD_DB[unit.card_id]
-            print(f"  [O{i}] {card['name']} ({unit.current_attack}/{unit.current_health})")
-        else:
-            print(f"  [O{i}] ---")
+        card = CARD_DB[unit.card_id]
+        print(f" [{i+1}] {card['name']} ({unit.current_attack}/{unit.current_health})")
     
     print("\n" + "-"*50 + "\n")
 
     print(f"--- YOUR SIDE (Player {human_player_index + 1}) ---")
     print("Your Board:")
     for i, unit in enumerate(player.board):
-        if unit:
-            card = CARD_DB[unit.card_id]
-            print(f"  [Y{i}] {card['name']} ({unit.current_attack}/{unit.current_health})")
-        else:
-            print(f"  [Y{i}] ---")
-    print(f"HP: {player.health} | Resources: {player.resource}")
+        card = CARD_DB[unit.card_id]
+        print(f" [{i+1}] {card['name']} ({unit.current_attack}/{unit.current_health})")
+    print(f"HP: {player.health} | Resources: {player.resource} | Score: {myscore}")
 
     print("\nYour Hand:")
     for i, card_id in enumerate(player.hand):

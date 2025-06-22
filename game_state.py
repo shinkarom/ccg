@@ -163,3 +163,46 @@ class GameState:
         This is a convenience wrapper around get_winner_index().
         """
         return self.get_winner_index() != -1
+        
+    def get_score(self) -> (float, float):
+        """
+        Calculates a simple, "eyeball-style" score based on board presence
+        and health. Higher score is better.
+        Returns a tuple (p0_score, p1_score).
+        """
+        p0 = self.players[0]
+        p1 = self.players[1]
+        
+        # --- Calculate Player 0's Score ---
+        # 1. Threat Score (Board)
+        p0_threat_score = 0
+        for unit in p0.board:
+            # The simple formula: (Attack * 2) + Health
+            p0_threat_score += (unit.current_attack * 2) + unit.current_health
+        
+        # 2. Resilience Score (Health)
+        p0_resilience_score = p0.health
+
+        p0_total_score = p0_threat_score + p0_resilience_score
+
+        # --- Calculate Player 1's Score ---
+        # 1. Threat Score (Board)
+        p1_threat_score = 0
+        for unit in p1.board:
+            p1_threat_score += (unit.current_attack * 2) + unit.current_health
+            
+        # 2. Resilience Score (Health)
+        p1_resilience_score = p1.health
+
+        p1_total_score = p1_threat_score + p1_resilience_score
+        
+        # --- Apply Decisive Win Bonus ---
+        # This bonus ensures that a game-winning state is always valued highest.
+        WINNER_BONUS = 1000
+        
+        if p1.health <= 0 and p0.health > 0:
+            p0_total_score += WINNER_BONUS
+        elif p0.health <= 0 and p1.health > 0:
+            p1_total_score += WINNER_BONUS
+            
+        return p0_total_score, p1_total_score
