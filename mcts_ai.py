@@ -181,51 +181,62 @@ class MCTS_AI:
     def backpropagate(self, leaf_node: 'MCTSNode', final_sim_state: GameState, 
                   search_player_index: int, moves_in_tree: set, moves_in_sim: set):
         """
-        Updates the statistics of nodes from the leaf back up to the root.
+        Updates statistics from the leaf to the root using standard MCTS scoring.
+        - Win: 1.0, Loss: 0.0, Draw: 0.5
+
+        This version correctly interprets the GameState.get_winner_index() contract where:
+        - A player index indicates a win.
+        - -2 indicates a draw.
+        - -1 indicates the game is not over.
         """
-        
-        # --- 1. Determine the simulation result (1 for P0 win, -1 for P1 win, 0 for draw) ---
         winner_idx = final_sim_state.get_winner_index()
-        result = 0 
-        if winner_idx == 0: 
-            result = 1
-        elif winner_idx == 1: 
-            result = -1
-        # Fallback to health heuristic if the game didn't officially end.
+
+        # 1. Determine the score for the search_player based on the game's outcome.
+        result_for_search_player = 0.0  # Default to a loss
+
+        if winner_idx == search_player_index:
+            result_for_search_player = 1.0  # Win
+        elif winner_idx == -2:
+            result_for_search_player = 0.5  # Draw
         elif winner_idx == -1:
-            p0_health = final_sim_state.players[0].health
-            p1_health = final_sim_state.players[1].health
-            if p0_health > p1_health: 
-                result = 1
-            elif p1_health > p0_health: 
-                result = -1
+            # Game is not over; use a heuristic to evaluate the position.
+            p_search_health = final_sim_state.players[search_player_index].health
+            p_other_health = final_sim_state.players[1 - search_player_index].health
 
-        # --- 2. Walk up the tree and update stats ---
+            if p_search_health > p_other_health:
+                result_for_search_player = 1.0  # Treat as a likely win
+            elif p_search_health < p_other_health:
+                result_for_search_player = 0.0  # Treat as a likely loss
+            else:
+                # An equal-health unfinished game is a neutral/draw-like outcome.
+                result_for_search_player = 0.5
+        # The 'else' case (winner_idx is the other player) is covered by the default 0.0.
+
+        # 2. Combine all moves for the RAVE update.
         all_moves_made_in_playout = moves_in_tree.union(moves_in_sim)
-        node_iterator = leaf_node
         
+        # 3. Iterate up the tree from the leaf to the root.
+        node_iterator = leaf_node
         while node_iterator is not None:
-            # Determine the outcome from the perspective of the player at THIS node.
-            # This is the key fix.
             player_at_node = node_iterator.game_state.current_player_index
-            is_win_for_node_player = (player_at_node == 0 and result == 1) or \
-                                     (player_at_node == 1 and result == -1)
             
-            # A. Update standard MCTS stats for the node
-            node_iterator.visits += 1
-            if is_win_for_node_player:
-                node_iterator.wins += 1
-            # (Alternatively, if you have draws, you could add 0.5 for a draw)
-            # elif result == 0:
-            #     node_iterator.wins += 0.5
+            # 4. Apply the perspective shift. This simple formula now works for all cases.
+            if player_at_node == search_player_index:
+                score_for_node_player = result_for_search_player
+            else:
+                # Opponent's score is the inverse.
+                # Win (1.0) -> Loss (0.0)
+                # Loss (0.0) -> Win (1.0)
+                # Draw (0.5) -> Draw (0.5)
+                score_for_node_player = 1.0 - result_for_search_player
 
-            # B. Update RAVE stats for all moves in the playout
-            # The win attribution is based on the perspective of the player at THIS node.
+            # 5. Update the node's statistics.
+            node_iterator.visits += 1
+            node_iterator.wins += score_for_node_player
+
+            # RAVE stats:
             for move in all_moves_made_in_playout:
-                # Use .get() for safety in case a move isn't in the dict yet.
                 node_iterator.rave_visits[move] = node_iterator.rave_visits.get(move, 0) + 1
-                if is_win_for_node_player:
-                    node_iterator.rave_wins[move] = node_iterator.rave_wins.get(move, 0) + 1
+                node_iterator.rave_wins[move] = node_iterator.rave_wins.get(move, 0) + score_for_node_player
             
-            # Move up to the parent node
             node_iterator = node_iterator.parent
