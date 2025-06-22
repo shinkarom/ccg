@@ -6,6 +6,9 @@ if TYPE_CHECKING:
     from game_state import GameState
 
 MAX_HAND_SIZE = 7
+# The maximum number of units a player can have on the board.
+# A fixed size is important for a predictable state structure.
+BOARD_SIZE = 7
 
 def _end_turn_sequence(state: GameState) -> GameState:
     state.current_player_index = 1 - state.current_player_index
@@ -79,17 +82,14 @@ class MainPhase(Phase):
             card_info = CARD_DB[card_id]
             if player.resource >= card_info['cost']:
                 if card_info['type'] == 'UNIT':
-                    if any(slot is None for slot in player.board):
-                        # Action: ('PLAY_UNIT', hand_index, board_index)
-                        for j, slot in enumerate(player.board):
-                            if slot is None:
-                                legal_moves.append(('PLAY_UNIT', i, j))
+                    if len(player.board)<BOARD_SIZE-1:
+                        legal_moves.append(('PLAY_UNIT', i))
                 elif card_info['type'] == 'ACTION':
                     # Simplified targeting
                     legal_moves.append(('PLAY_ACTION', i))
 
         # --- Attacking with ready units ---
-        if any(u.is_ready for u in player.board if u is not None):
+        if any(u for u in player.board if u is not None):
              legal_moves.append(('ATTACK_ALL',))
              
         #if not legal_moves:
@@ -108,21 +108,38 @@ class MainPhase(Phase):
 
         if action_type in ('PLAY_UNIT', 'PLAY_ACTION'):
             ind = action[1]
-            card_id = player.hand[ind]
-            if ind < len(player.hand):
-                card_info = CARD_DB[card_id]
-                player.hand.pop(ind)
-                player.resource -= card_info['cost']
-                player.graveyard.append(card_id)
-                if action_type == 'PLAY_UNIT':
-                    board_index = action[2]
-                    player.board[board_index] = UnitState(
-                        card_id=card_id, current_attack=card_info['attack'],
-                        current_health=card_info['health'], is_ready=False,
-                        keywords=card_info.get('keywords', set()).copy()
-                    )
-            else:
+            
+            # --- VALIDATION PHASE ---
+            # 1. Validate hand index.
+            if ind >= len(player.hand):
                 raise IndexError(f"MCTS Desync: Tried to play from hand index {ind}, but hand size is {len(player.hand)}. Hand: {player.hand}")
+                
+            card_id = player.hand[ind]
+            # It's good practice to handle potential DB errors, though MCTS assumes a valid state.
+            card_info = CARD_DB.get(card_id) 
+            if not card_info:
+                raise KeyError(f"MCTS Desync: Card ID '{card_id}' not found in CARD_DB.")
+
+            # 2. Validate resource cost.
+            if player.resource < card_info['cost']:
+                raise ValueError(f"MCTS Desync: Tried to play card {card_id} with cost {card_info['cost']}, but player only has {player.resource} resources.")
+
+            player.hand.pop(ind)
+            
+            # b. Pay cost and move to graveyard.
+            player.resource -= card_info['cost']
+            player.graveyard.append(card_id)
+            
+            # c. Put the unit on the board if applicable.
+            if action_type == 'PLAY_UNIT':
+                u = UnitState(
+                    card_id=card_id,
+                    current_attack=card_info['attack'],
+                    current_health=card_info['health'],
+                    # Robustly handle optional keywords and create a copy to prevent aliasing.
+                    keywords=card_info.get('keywords', set()).copy()
+                )
+                player.board.append(u)
 
         elif action_type == 'ATTACK_ALL':
             player = state.players[state.current_player_index]
@@ -131,7 +148,7 @@ class MainPhase(Phase):
             # --- Step 1: Calculate total incoming damage from all ready attackers ---
             total_incoming_damage = 0
             for unit in player.board:
-                if unit and unit.is_ready:
+                if unit:
                     total_incoming_damage += unit.current_attack
                     unit.is_ready = False # Attacking exhausts them, this is correct.
 
@@ -157,7 +174,6 @@ class MainPhase(Phase):
                     else:
                         # The unit died, put it in the graveyard
                         opponent.graveyard.append(unit.card_id)
-                        new_opponent_board.append(None) # Leave the board slot empty
                 else:
                     new_opponent_board.append(None) # The slot was already empty
             
@@ -195,9 +211,6 @@ class UpkeepPhase(Phase):
             if state.turn_number == 1:
                 while len(i.hand) < MAX_HAND_SIZE:
                     i.hand.append(i.deck.pop()) 
-            
-            for unit in i.board:
-                if unit: unit.is_ready = True
         
         state.current_player_index = (state.current_player_index+1)%len(state.players)
         player = state.players[state.current_player_index]

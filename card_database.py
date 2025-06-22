@@ -49,7 +49,7 @@ CARD_DB = {
         'id': 101,
         'name': "Energy Surge",
         'type': 'ACTION',
-        'cost': 0,
+        'cost': 1,
         'effect': ('DRAW_CARDS', 1),
         'text': "Draw a card."
     },

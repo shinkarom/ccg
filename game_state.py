@@ -9,17 +9,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from phases import Phase, UpkeepPhase
 
-# The maximum number of units a player can have on the board.
-# A fixed size is important for a predictable state structure.
-BOARD_SIZE = 7
-
 @dataclass
 class UnitState:
     """Represents a single unit on the board."""
     card_id: int
     current_attack: int
     current_health: int
-    is_ready: bool = True  # Can this unit act this turn? (False if just summoned or has acted)
     keywords: Set[str] = field(default_factory=set)
 
 @dataclass
@@ -34,7 +29,7 @@ class PlayerState:
     graveyard: List[int] = field(default_factory=list)
     
     # The board is a fixed-size list, which simplifies AI logic.
-    board: List[Optional[UnitState]] = field(default_factory=lambda: [None] * BOARD_SIZE)
+    board: List[UnitState] = field(default_factory=list)
 
 @dataclass
 class GameState:
@@ -44,17 +39,6 @@ class GameState:
     turn_number: int = 1
     
     current_phase: "Phase" = None
-    
-    # The phase determines what actions are legal.
-    # e.g., 'MAIN', 'COMBAT_DECLARE', 'COMBAT_BLOCK'
-    
-    # Maps attacking unit's board index to its target tuple.
-    # e.g., {1: ('PLAYER',), 3: ('UNIT', 2)}
-    attackers: Dict[int, Tuple] = field(default_factory=dict)
-    
-    # Maps blocking unit's board index to the attacking unit's board index it's blocking.
-    # e.g., {0: 1, 4: 3}
-    blockers: Dict[int, int] = field(default_factory=dict)
     
     def clone(self) -> 'GameState':
         """

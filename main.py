@@ -30,8 +30,7 @@ def render_game_state(state: GameState, human_player_index: int):
     for i, unit in enumerate(opponent.board):
         if unit:
             card = CARD_DB[unit.card_id]
-            ready = "✓" if unit.is_ready else "✗"
-            print(f"  [O{i}] {card['name']} ({unit.current_attack}/{unit.current_health}) {ready}")
+            print(f"  [O{i}] {card['name']} ({unit.current_attack}/{unit.current_health})")
         else:
             print(f"  [O{i}] ---")
     
@@ -42,8 +41,7 @@ def render_game_state(state: GameState, human_player_index: int):
     for i, unit in enumerate(player.board):
         if unit:
             card = CARD_DB[unit.card_id]
-            ready = "✓" if unit.is_ready else "✗"
-            print(f"  [Y{i}] {card['name']} ({unit.current_attack}/{unit.current_health}) {ready}")
+            print(f"  [Y{i}] {card['name']} ({unit.current_attack}/{unit.current_health})")
         else:
             print(f"  [Y{i}] ---")
     print(f"HP: {player.health} | Resources: {player.resource}")
@@ -115,7 +113,7 @@ if __name__ == "__main__":
     # --- Game Setup ---
     game_state = game_logic.init_game([generate_quick_deck(40),generate_quick_deck(40)],{})
     ai_instances = {
-        i: MCTS_AI(time_limit_ms=500) for i, p_type in enumerate(player_types) if p_type == 'AI'
+        i: MCTS_AI(time_limit_ms=1500) for i, p_type in enumerate(player_types) if p_type == 'AI'
     }
 
     # --- Main Game Loop ---
