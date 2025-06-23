@@ -8,10 +8,11 @@ import random
 
 def init_game(decks,opts={}):
     players = []
-    for i in decks:
+    for j, i in enumerate(decks):
         p = PlayerState()
         p.resource = 0
         p.deck = i
+        p.number = j+1
         random.shuffle(p.deck)
         players.append(p)
     state = GameState(players=players)

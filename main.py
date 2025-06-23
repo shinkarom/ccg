@@ -29,17 +29,18 @@ def generate_quick_deck(deck_size: int = 30) -> list[int]:
 if __name__ == "__main__":
     ui = ConsoleUI()
     
-    # --- Main Menu ---
     ui.display_welcome()
     mode = ui.get_game_mode()
     
     # --- Mode Setup ---
-    if mode == '1': # Player vs Player
+    if mode == '1':   # PvP
         player_types = ['HUMAN', 'HUMAN']
-    elif mode == '2': # Player vs AI
+    elif mode == '2': # PvE
         player_types = ['HUMAN', 'AI']
-    else: # mode == '3', AI vs AI
+    else:             # AvA
         player_types = ['AI', 'AI']
+            
+    human_player_index = player_types.index('HUMAN') if 'HUMAN' in player_types else -1
             
     # --- Game Setup ---
     game_state = game_logic.init_game([generate_quick_deck(40), generate_quick_deck(40)])
@@ -51,42 +52,54 @@ if __name__ == "__main__":
     }
 
     # --- Main Game Loop ---
+    previous_player_idx = -1 
+
     while True:
+        # 1. Check for Game Over.
         winner_index = game_state.get_winner_index()
         if winner_index != -1:
-            # For PvP, we need to know whose perspective to render the final state from
-            final_pov = 0 if game_state.current_player_index == 1 else 1
-            ui.render_game_state(game_state, final_pov)
+            # Determine final POV for rendering
+            pov_index_at_end = human_player_index if mode == '2' else previous_player_idx
+            ui.render_game_state(game_state, pov_index_at_end)
             ui.display_game_over(winner_index)
             break
-
+        
         current_player_idx = game_state.current_player_index
+        
+        # 2. Universal "Press Enter" prompt driven by priority change.
+        if current_player_idx != previous_player_idx:
+            ui.prompt_for_priority(current_player_idx + 1)
+        
+        previous_player_idx = current_player_idx
+        
+        # 3. --- THE CORRECTED, MODE-AWARE RENDERING LOGIC ---
+        pov_to_render = -1
+        if mode == '1' or mode == '3': # PvP or AvA
+            # In these modes, we always render from the current player's perspective.
+            pov_to_render = current_player_idx
+        else: # mode == '2', Player vs. AI
+            # In PvE, we ALWAYS render from the human's perspective.
+            pov_to_render = human_player_index
+            
+        ui.render_game_state(game_state, pov_to_render)
+        # --- END OF CORRECTED LOGIC ---
+        
+        # 4. Get the action from the correct player type.
         action = None
-
-        # --- Get move based on player type ---
         if player_types[current_player_idx] == 'HUMAN':
-            # For PvP, announce the turn change and wait for the next player
-            if player_types[0] == 'HUMAN' and player_types[1] == 'HUMAN':
-                input(f"\nPlayer {current_player_idx + 1}, your turn is ready. Press Enter to continue...")
-
-            ui.render_game_state(game_state, current_player_idx)
             action = ui.get_human_move(game_state)
         else: # AI's turn
-            # Render from the perspective of the human opponent, if one exists
-            human_opponent_idx = 1 - current_player_idx if 'HUMAN' in player_types else -1
-            if human_opponent_idx != -1:
-                 ui.render_game_state(game_state, human_opponent_idx)
-            else: # AI vs AI
-                 print(f"Turn {game_state.turn_number}, Player {current_player_idx+1}'s turn...")
-
-
             ai = ai_instances[current_player_idx]
             action, rollouts = ai.find_best_move(game_state)
+            # We don't need to re-render here, just announce the move.
             ui.display_ai_move(action, rollouts)
         
-        # Apply the chosen action
+        # 5. Apply the action to get the new state.
         if action:
+            if action == ("QUIT_GAME",):
+                break;
+            
             game_state = game_state.process_action(action)
         else:
-            print("Error: No action was chosen. Exiting.")
+            print("Error: No action was chosen or available. Exiting.")
             break

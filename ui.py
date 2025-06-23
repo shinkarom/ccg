@@ -33,64 +33,120 @@ class ConsoleUI:
             else:
                 print("Invalid choice. Please enter 1, 2, or 3.")
 
-    def render_game_state(self, state: GameState, current_pov_index: int):
+    def render_game_state(self, state: GameState, pov_player_index: int):
         """
-        Prints the game state to the console from the perspective of the
-        current player (current_pov_index).
+        Prints the game state to the console.
+        - If human_player_index is a valid index, it renders from that player's perspective.
+        - If human_player_index is -1 (AI vs AI), it renders a neutral, top-down view.
         """
         self.clear_screen()
         
-        player = state.players[current_pov_index]
-        opponent = state.players[1 - current_pov_index]
-        
-        # Determine player labels
-        pov_string = f"PLAYER {current_pov_index + 1}'S"
-        opp_string = f"PLAYER {1 - current_pov_index + 1}'S"
+        # --- CORRECTED: Determine Perspective and Labels ---
+        if pov_player_index != -1: # PvP or PvE mode
+            p_pov = state.players[pov_player_index]
+            p_opp = state.players[1 - pov_player_index]
+            pov_string = "YOUR"
+            opp_string = "OPPONENT'S"
+        else: # Neutral AI vs AI view
+            p_pov = state.players[0]
+            p_opp = state.players[1]
+            pov_string = "PLAYER 1'S"
+            opp_string = "PLAYER 2'S"
 
         print("="*50)
-        print(f"--- {opp_string} SIDE ---")
-        # ... (rest of rendering is unchanged) ...
-        print("\n" + "-"*20 + " VS " + "-"*22 + "\n")
-        print(f"--- {pov_string} SIDE ---")
-        # ... (rest of rendering is unchanged) ...
+        print(f"--- {opp_string} SIDE (Player {p_opp.number}) ---") # Assuming PlayerState has an ID
+        print(f"HP: {p_opp.health:<3} | Resources: {p_opp.resource:<2} | Hand: {len(p_opp.hand):<2} | Deck: {len(p_opp.deck):<2}")
+        print("Board:")
+        if not p_opp.board: print("  (empty)")
+        for unit in p_opp.board:
+            card = CARD_DB.get(unit.card_id, {})
+            print(f"  > {card.get('name', 'Unknown')} ({unit.current_attack}/{unit.current_health})")
         
-        print("\nYour Hand:") # Use a generic "Your Hand"
-        for i, card_id in enumerate(player.hand):
+        print("\n" + "-"*20 + " VS " + "-"*22 + "\n")
+
+        print(f"--- {pov_string} SIDE (Player {p_pov.number}) ---")
+        print("Board:")
+        if not p_pov.board: print("  (empty)")
+        for unit in p_pov.board:
+            card = CARD_DB.get(unit.card_id, {})
+            print(f"  > {card.get('name', 'Unknown')} ({unit.current_attack}/{unit.current_health})")
+        print(f"HP: {p_pov.health:<3} | Resources: {p_pov.resource:<2} | Deck: {len(p_pov.deck):<2}")
+
+        print("\nHand (for Player {}):".format(pov_player_index + 1))
+        player_with_pov = state.players[pov_player_index]
+        for i, card_id in enumerate(player_with_pov.hand):
             card = CARD_DB.get(card_id, {})
-            print(f"  [{i+1}] {card.get('name', 'Unknown')} (Cost: {card.get('cost', '?')}) - {card.get('text', '')}")
+            print(f"  [{i+1}] {card.get('name', 'Unknown')} (Cost: {card.get('cost', '?')})")
         
         print("="*50)
         
-        turn_status = f"** PLAYER {state.current_player_index + 1}, IT'S YOUR TURN **"
+        # --- CORRECTED: Turn Status Logic ---
+        turn_status = f"Player {state.current_player_index + 1}'s Turn"
+        if pov_player_index != -1:
+            if state.current_player_index == pov_player_index:
+                turn_status = "** YOUR TURN **"
+            else:
+                turn_status = "OPPONENT'S TURN"
             
         print(f"Turn {state.turn_number} | Phase: {state.current_phase.get_name()} | {turn_status}\n")
+
+    def prompt_for_priority(self, player_number: int):
+        """A generic prompt that waits for the player who has control."""
+        input(f"\n--- Player {player_number}, you have priority. --- \nPress Enter to continue...")
         
     def get_human_move(self, state: GameState) -> tuple:
-        """Gets a move from a human player by displaying a numbered list of legal moves."""
+        """
+        Gets a move from a human player. Also parses input to differentiate
+        between move selections and non-move commands, leaving command
+        implementation to the developer.
+        """
         legal_moves = state.get_legal_moves()
-        
-        print("--- Choose Your Action ---")
-        for i, move in enumerate(legal_moves):
-            # --- CORRECTED LOGIC ---
-            # This is now "dumb". It looks for a description string, otherwise just prints the raw tuple.
-            # This will work now and will automatically support your future change.
-            description = str(move) # Default to the raw tuple representation
-            if len(move) > 2 and isinstance(move[2], str):
-                description = move[2] # Use the provided description string
-            
-            print(f"[{i+1}] {description}")
-        
-        while True:
-            try:
-                choice = input("\nEnter the number of your move: ")
-                choice_idx = int(choice) - 1
-                if 0 <= choice_idx < len(legal_moves):
-                    return legal_moves[choice_idx]
-                else:
-                    print("Invalid number. Please try again.")
-            except (ValueError, IndexError):
-                print("Invalid input. Please enter a valid number from the list.")
 
+        # --- The Command Loop ---
+        while True:
+            # Display the list of available moves
+            print("--- Choose Your Action ---")
+            for i, move in enumerate(legal_moves):
+                # This part correctly handles future descriptions in the move tuple
+                description = str(move)
+                if len(move) > 2 and isinstance(move[2], str):
+                    description = move[2]
+                print(f"[{i+1}] {description}")
+            
+            print("\nType a number to make a move, or type a command.")
+            user_input = input("> ").strip()
+
+            # --- Check if the input is a number (a move selection) ---
+            if user_input.isdigit():
+                try:
+                    choice_idx = int(user_input) - 1
+                    if 0 <= choice_idx < len(legal_moves):
+                        # Valid move number. Return the action tuple.
+                        return legal_moves[choice_idx]
+                    else:
+                        print("Invalid move number. Please try again.")
+                        # Continue the loop to re-prompt
+                        continue
+                except ValueError:
+                    # This case is unlikely given isdigit() but is safe to have.
+                    pass # Fall through to command handling
+
+            # --- If not a number, treat it as a command ---
+            # The input is now considered a command to be parsed and handled.
+            # This is where you will add your own command logic.
+            
+            parts = user_input.lower().split()
+            command = parts[0]
+
+            if command == "quit":
+                print("Quitting game.")
+                return ('QUIT_GAME',) # Return a special tuple to be handled by the main loop.
+
+            # Default case for unrecognized commands
+            else:
+                print(f"Unknown command: '{user_input}'")
+                # Continue the loop to re-prompt
+                
     def display_ai_move(self, action: tuple, rollouts: int):
         """Announces the AI's move."""
         description = str(action)

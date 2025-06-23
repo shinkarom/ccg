@@ -22,7 +22,7 @@ class PlayerState:
     """Represents all data for one player."""
     health: int = 20
     resource: int = 0
-    
+    number: int = 0
     # We store card IDs (integers) not full card objects, to keep the state light.
     deck: List[int] = field(default_factory=list)
     hand: List[int] = field(default_factory=list)
