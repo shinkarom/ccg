@@ -9,7 +9,7 @@ from game_state import GameState, PlayerState
 from phases import UpkeepPhase
 from card_database import CARD_DB
 import game_logic
-from mcts_ai import MCTS_AI
+from ccg_ai import CCG_AI
 
 def clear_screen():
     """Clears the console screen."""
@@ -109,8 +109,11 @@ if __name__ == "__main__":
             
     # --- Game Setup ---
     game_state = game_logic.init_game([generate_quick_deck(40),generate_quick_deck(40)],{})
+    ai_opts = {
+        "time_limit_ms": 500,
+    }
     ai_instances = {
-        i: MCTS_AI(time_limit_ms=1500) for i, p_type in enumerate(player_types) if p_type == 'AI'
+        i: CCG_AI(ai_opts) for i, p_type in enumerate(player_types) if p_type == 'AI'
     }
 
     # --- Main Game Loop ---
