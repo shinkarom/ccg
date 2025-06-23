@@ -24,6 +24,7 @@ class CCG_AI:
         "recon_depth": 10,
         "probes_per_world": 10,
         "certainty_exponent": 1.0,
+        "variance_weight": 0.0,
     }
     
     def __init__(self, options: dict = None):
@@ -95,6 +96,8 @@ class CCG_AI:
         probes_per_world = self.options["probes_per_world"]
         exploration_constant_C = self.options["exploration_weight"]
         recon_depth_limit = self.options["recon_depth"]
+        variance_weight = self.options["variance_weight"]
+        certainty_exp = self.options["certainty_exponent"]
 
         legal_moves = initial_state.get_legal_moves()
         if not legal_moves: return None, 0
@@ -130,7 +133,8 @@ class CCG_AI:
                     avg_squared_reward = stats["total_squared_reward"] / stats["visits"]
                     variance = max(0, avg_squared_reward - (avg_reward ** 2))
                     exploration_bonus = math.sqrt((math.log(total_evaluation_count + 1) / stats["visits"]) * min(0.25, variance))
-                    ucb_score = avg_reward + exploration_constant_C * exploration_bonus
+                    variance_bias = variance_weight * variance
+                    ucb_score = avg_reward + variance_bias + exploration_constant_C * exploration_bonus
 
                 if ucb_score > max_ucb_score:
                     max_ucb_score = ucb_score
