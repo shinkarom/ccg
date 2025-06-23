@@ -164,45 +164,69 @@ class GameState:
         """
         return self.get_winner_index() != -1
         
-    def get_score(self) -> (float, float):
+    def _calculate_single_player_score(self, player_index: int, weights: dict) -> float:
         """
-        Calculates a simple, "eyeball-style" score based on board presence
-        and health. Higher score is better.
-        Returns a tuple (p0_score, p1_score).
+        Calculates a raw, un-normalized score for a single player based on a given weight dictionary.
+        This is the core evaluation helper.
         """
-        p0 = self.players[0]
-        p1 = self.players[1]
-        
-        # --- Calculate Player 0's Score ---
-        # 1. Threat Score (Board)
-        p0_threat_score = 0
-        for unit in p0.board:
-            # The simple formula: (Attack * 2) + Health
-            p0_threat_score += (unit.current_attack * 2) + unit.current_health
-        
-        # 2. Resilience Score (Health)
-        p0_resilience_score = p0.health
+        if not weights: return 0.0
 
-        p0_total_score = p0_threat_score + p0_resilience_score
+        player = self.players[player_index]
+        total_score = 0.0
+        
+        # --- Resilience Score (Health) ---
+        total_score += player.health * weights["health"]
 
-        # --- Calculate Player 1's Score ---
-        # 1. Threat Score (Board)
-        p1_threat_score = 0
-        for unit in p1.board:
-            p1_threat_score += (unit.current_attack * 2) + unit.current_health
+        # --- Threat Score (Board) ---
+        board_attack_w = weights["board_attack"]
+        board_health_w = weights["board_health"]
+
+        for unit in player.board:
+            total_score += (unit.current_attack * board_attack_w)
+            total_score += (unit.current_health * board_health_w)
             
-        # 2. Resilience Score (Health)
-        p1_resilience_score = p1.health
+        # You could easily add more terms here, e.g., hand size
+        # hand_size = len(player.hand)
+        # total_score += hand_size * weights.get("hand_w", 0.0)
+        
+        return total_score    
+        
+    def get_score(self, eval_weights: dict) -> float:
+        """
+        Calculates a final, normalized score for MCTS using a personality profile.
+        Supports both symmetrical (one dict) and asymmetrical (two dicts) evaluation.
+        """
+        if self.is_terminal():
+            winner = self.get_winner_index()
+            if winner == self.current_player_index: return 1.0  # I (current player) won
+            if winner is not None: return -1.0 # I (current player) lost
+            return 0.0
 
-        p1_total_score = p1_threat_score + p1_resilience_score
+        my_player_index = self.current_player_index
+        opp_player_index = 1 - my_player_index
+
+        # --- NEW: Symmetrical Flag Logic ---
+        is_symmetrical = eval_weights["symmetrical"]
+
+        my_weights = eval_weights.get("my_eval", {})
+
+        if is_symmetrical:
+            # If symmetrical, use the 'my_eval' dictionary for the opponent as well.
+            opp_weights = my_weights
+        else:
+            # Otherwise, look for the specific 'opp_eval' dictionary.
+            opp_weights = eval_weights.get("opp_eval", {})
+        # --- End of New Logic ---
+
+        # Step 3: Calculate subjective scores (this part is now more flexible)
+        my_subjective_score = self._calculate_single_player_score(my_player_index, my_weights)
+        opp_subjective_score = self._calculate_single_player_score(opp_player_index, opp_weights)
         
-        # --- Apply Decisive Win Bonus ---
-        # This bonus ensures that a game-winning state is always valued highest.
-        WINNER_BONUS = 1000
+        raw_score = my_subjective_score - opp_subjective_score
+
+        # Step 4: Normalization (unchanged)
+        max_score_swing = eval_weights["max_score_swing"]
+        clamped_score = max(-max_score_swing, min(max_score_swing, raw_score))
+        normalized_score = clamped_score / max_score_swing
         
-        if p1.health <= 0 and p0.health > 0:
-            p0_total_score += WINNER_BONUS
-        elif p0.health <= 0 and p1.health > 0:
-            p1_total_score += WINNER_BONUS
-            
-        return p0_total_score, p1_total_score
+        return normalized_score

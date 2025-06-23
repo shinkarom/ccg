@@ -22,13 +22,10 @@ def render_game_state(state: GameState, human_player_index: int):
     player = state.players[human_player_index]
     opponent = state.players[1 - human_player_index]
     is_my_turn = (state.current_player_index == human_player_index)
-    score1,score2 = state.get_score()
-    myscore = score1 if state.current_player_index == 0 else score2
-    oppscore = score2 if state.current_player_index == 1 else score1
 
     print("="*50)
     print(f"--- OPPONENT'S SIDE (Player {1 - human_player_index + 1}) ---")
-    print(f"HP: {opponent.health} | Resources: {opponent.resource} | Hand: {len(opponent.hand)} | Score: {oppscore}")
+    print(f"HP: {opponent.health} | Resources: {opponent.resource} | Hand: {len(opponent.hand)}")
     print("Board:")
     for i, unit in enumerate(opponent.board):
         card = CARD_DB[unit.card_id]
@@ -41,7 +38,7 @@ def render_game_state(state: GameState, human_player_index: int):
     for i, unit in enumerate(player.board):
         card = CARD_DB[unit.card_id]
         print(f" [{i+1}] {card['name']} ({unit.current_attack}/{unit.current_health})")
-    print(f"HP: {player.health} | Resources: {player.resource} | Score: {myscore}")
+    print(f"HP: {player.health} | Resources: {player.resource}")
 
     print("\nYour Hand:")
     for i, card_id in enumerate(player.hand):
@@ -120,7 +117,7 @@ if __name__ == "__main__":
     while True:
         # Check for win condition
         ind = game_state.get_winner_index()
-        if ind > 0:
+        if ind > -1:
             print("="*50)
             print(f"!!! GAME OVER: Player {1-ind+1} WINS! !!!")
             print("="*50)

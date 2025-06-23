@@ -19,12 +19,27 @@ class CCG_AI:
         "time_limit_ms": 1000,
         "evaluation_limit": float("inf"),
         "exploration_weight": 1.41,
-        "temperature": 0.5,
+        "temperature": 0.1,
         "blunder_chance": 0.0,
         "recon_depth": 10,
         "probes_per_world": 10,
         "certainty_exponent": 1.0,
         "variance_weight": 0.0,
+        
+        "eval_weights": {
+            "max_score_swing": 100.0,
+            "symmetrical": True,
+            "my_eval": {
+                "health": 1.0,
+                "board_attack": 1.0,
+                "board_health": 1.0,
+            },
+            "opp_eval": {
+                "health": 1.0,
+                "board_attack": 1.0,
+                "board_health": 1.0,
+            },
+        }
     }
     
     def __init__(self, options: dict = None):
@@ -112,7 +127,7 @@ class CCG_AI:
         start_time = time.time()
         total_evaluation_count = 0
         current_determinized_state = None
-
+        player_index = initial_state.current_player_index
         # --- 3. MAIN SEARCH LOOP ---
         while True:
             if (time.time() - start_time) >= time_limit: break
@@ -144,9 +159,9 @@ class CCG_AI:
             state_after_move = current_determinized_state.process_action(best_move_to_probe)
             final_recon_state = self.run_recon_playout(state_after_move, recon_depth_limit)
             
-            p0_score, p1_score = final_recon_state.get_score()
-            my_score, opp_score = (p0_score, p1_score) if initial_state.current_player_index == 0 else (p1_score, p0_score)
-            reward = self.normalize_score_diff(my_score, opp_score)
+            reward = final_recon_state.get_score(self.options["eval_weights"])
+            if final_recon_state.current_player_index != player_index:
+                reward = -reward
             
             certainty_exp = self.options["certainty_exponent"]
             if certainty_exp != 1.0:

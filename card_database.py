@@ -43,6 +43,16 @@ CARD_DB = {
         'keywords': set(), 
         'text': "Improved Golem."
     },
+    4: {
+        'id': 4,
+        'name': "Even Larger Golem",
+        'type': 'UNIT',
+        'cost': 4,
+        'attack': 3,
+        'health': 3,
+        'keywords': set(), 
+        'text': "Next Gen Golem."
+    },
 
     # --- ACTIONS ---
     101: {
