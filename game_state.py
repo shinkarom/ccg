@@ -30,13 +30,44 @@ class PlayerState:
     
     # The board is a fixed-size list, which simplifies AI logic.
     board: List[UnitState] = field(default_factory=list)
+    
+    def draw_card(self):
+        """
+        Draws one card, adding it to the hand.
+        If the deck is empty, shuffles the graveyard to form a new deck
+        before drawing. Does nothing if hand is full or no cards are available.
+        """
+        # A global constant for max hand size is good practice
+        MAX_HAND_SIZE = 7 # Or whatever you have defined
+
+        if len(self.hand) >= MAX_HAND_SIZE:
+            # Can't draw if hand is full.
+            return
+
+        # --- THE CORE NEW LOGIC ---
+        if not self.deck:
+            # Deck is empty! Check the graveyard.
+            if not self.graveyard:
+                # No cards in deck OR graveyard. Cannot draw.
+                return
+            
+            # Reshuffle the graveyard into the deck.
+            print(f"Player's deck is empty. Reshuffling {len(self.graveyard)} cards from graveyard.")
+            self.deck = self.graveyard
+            self.graveyard = [] # The graveyard is now empty
+            random.shuffle(self.deck)
+        # --- END OF NEW LOGIC ---
+        
+        # Draw the top card from the deck and add it to the hand.
+        card_id = self.deck.pop(0) # pop(0) takes from the "top" of the deck
+        self.hand.append(card_id)
 
 @dataclass
 class GameState:
     """The complete, self-contained state of a game at any point in time."""
     players: List[PlayerState]
     current_player_index: int = -1
-    turn_number: int = 1
+    turn_number: int = 0
     
     current_phase: "Phase" = None
     

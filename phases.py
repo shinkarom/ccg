@@ -79,8 +79,8 @@ class MainPhase(Phase):
         if any(u for u in player.board if u is not None):
              legal_moves.append(('ATTACK_ALL',))
              
-        #if not legal_moves:
-        legal_moves.append(('PASS',))
+        for i in range(len(player.hand)):
+            legal_moves.append(('DISCARD', i))
             
         return legal_moves
 
@@ -128,6 +128,21 @@ class MainPhase(Phase):
                 )
                 player.board.append(u)
 
+        elif action_type == 'DISCARD':
+            hand_index = action[1]
+            
+            # Validation
+            if hand_index >= len(player.hand):
+                raise IndexError(f"MCTS Desync: Tried to discard from hand index {hand_index}, but hand size is {len(player.hand)}.")
+
+            # Move the card from hand to graveyard
+            card_to_discard = player.hand.pop(hand_index)
+            player.graveyard.append(card_to_discard)
+            player.draw_card()
+            
+            # Grant the resource
+            player.resource += 1
+
         elif action_type == 'ATTACK_ALL':
             player = state.players[state.current_player_index]
             opponent = state.players[1 - state.current_player_index]
@@ -174,10 +189,6 @@ class MainPhase(Phase):
             # --- Step 4: Any leftover damage hits the opponent's hero ---
             if total_incoming_damage > 0:
                 opponent.health -= total_incoming_damage
-            
-        elif action_type == 'PASS':
-            # This is a forced pass, so no action effect is applied.
-            pass
 
         return UpkeepPhase()
 
@@ -193,21 +204,14 @@ class UpkeepPhase(Phase):
         """This phase's logic runs automatically upon entry."""
         
         state.turn_number += 1
-        
         for i in state.players:
             if state.turn_number == 1:
                 while len(i.hand) < MAX_HAND_SIZE:
-                    i.hand.append(i.deck.pop()) 
+                    #i.hand.append(i.deck.pop()) 
+                    i.draw_card()
         
         state.current_player_index = (state.current_player_index+1)%len(state.players)
         player = state.players[state.current_player_index]
-        
-        if state.turn_number != 1:
-            while len(player.hand) < MAX_HAND_SIZE:
-                player.hand.append(player.deck.pop())         
-        
-        player.resource = min(10, player.resource + 1)
-        # 2. Set the next phase based on the result
         
         if len(player.hand) > MAX_HAND_SIZE:
             state.current_phase = DiscardPhase()
