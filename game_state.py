@@ -205,18 +205,10 @@ class GameState:
         my_player_index = self.current_player_index
         opp_player_index = 1 - my_player_index
 
-        # --- NEW: Symmetrical Flag Logic ---
-        is_symmetrical = eval_weights["symmetrical"]
-
         my_weights = eval_weights.get("my_eval", {})
-
-        if is_symmetrical:
-            # If symmetrical, use the 'my_eval' dictionary for the opponent as well.
-            opp_weights = my_weights
-        else:
-            # Otherwise, look for the specific 'opp_eval' dictionary.
-            opp_weights = eval_weights.get("opp_eval", {})
-        # --- End of New Logic ---
+        # A more concise way to handle the symmetrical case
+        is_symmetrical = eval_weights.get("symmetrical", False)
+        opp_weights = my_weights if is_symmetrical else eval_weights.get("opp_eval", {})
 
         # Step 3: Calculate subjective scores (this part is now more flexible)
         my_subjective_score = self._calculate_single_player_score(my_player_index, my_weights)

@@ -28,7 +28,7 @@ class CCG_AI:
         
         "eval_weights": {
             "max_score_swing": 100.0,
-            "symmetrical": True,
+            "symmetrical": False,
             "my_eval": {
                 "health": 1.0,
                 "board_attack": 1.0,
@@ -86,17 +86,40 @@ class CCG_AI:
         return random.choices(moves, weights=weights, k=1)[0]
 
     def run_recon_playout(self, start_state: 'GameState', depth_limit: int) -> 'GameState':
-        """Runs a short, random playout to explore the near future."""      
+        """
+        Runs a short, random playout to explore the near future.
+        This version includes "Forced Move" optimization, where moves are not
+        counted against the depth limit if there is only one legal option.
+        """      
         current_state = start_state.clone()
-        for _ in range(depth_limit):
-            if current_state.is_terminal(): break
+        
+        # Use a variable to track our remaining "decision depth"
+        remaining_depth = depth_limit
+
+        # The loop continues as long as we have depth and the game isn't over.
+        while remaining_depth > 0:
+            if current_state.is_terminal():
+                break
+
             legal_moves = current_state.get_legal_moves()
-            if not legal_moves: break
             
-            # Using process_action as seen in your original code
-            action = random.choice(legal_moves)
+            if not legal_moves:
+                break
+            
+            # --- THE CORE IMPROVEMENT ---
+            if len(legal_moves) == 1:
+                # This is a forced move.
+                action = legal_moves[0]
+                # We do NOT decrement remaining_depth here. The move is "free".
+            else:
+                # There is a choice to be made.
+                action = random.choice(legal_moves)
+                # We only "spend" our depth budget when making a real choice.
+                remaining_depth -= 1
+            # --- END OF IMPROVEMENT ---
+                
             current_state = current_state.process_action(action)
-            
+                
         return current_state
     
     def find_best_move(self, initial_state: 'GameState') -> tuple:
