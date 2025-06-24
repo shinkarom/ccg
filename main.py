@@ -88,6 +88,12 @@ class GameRunner:
             current_player = self.players[current_player_idx]
             action = None
 
+            r = game_state.get_legal_moves()
+            if len(r) == 1:
+                print(f"Automaticaly performing {r[0]}")
+                game_state = game_state.process_action(r[0])
+                continue
+
             if current_player.is_human():
                 # --- Human Player's Turn Sequence ---
                 # a. Get and display the advisor's suggestion automatically.
