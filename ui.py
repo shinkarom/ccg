@@ -4,6 +4,8 @@ import time
 # We need to import the type hints for our game objects
 from game_state import GameState, UnitCombatStatus
 from card_database import CARD_DB
+from rich import print
+from rich.prompt import Prompt
 
 class ConsoleUI:
     """Handles all console input and output for the game."""
@@ -15,9 +17,9 @@ class ConsoleUI:
     def display_welcome(self):
         """Prints the initial welcome message."""
         self.clear_screen()
-        print("=============================================")
-        print("         Welcome to the Python CCG!          ")
-        print("=============================================")
+        print("[#aabbcc]=============================================")
+        print("[#aabbdd]         Welcome to the Python CCG!          ")
+        print("[#aabbee]=============================================")
 
     def get_game_mode(self) -> str:
         """Asks the user to select a game mode and returns the choice."""
@@ -137,7 +139,7 @@ class ConsoleUI:
                 print(f"[{i+1}] {description}")
             
             print("\nType a number to make a move, or type a command.")
-            user_input = input("> ").strip()
+            user_input = Prompt.ask("> ").strip()
 
             # --- Check if the input is a number (a move selection) ---
             if user_input.isdigit():

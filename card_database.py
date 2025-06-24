@@ -1,5 +1,5 @@
 # card_database.py
-
+from rich import print
 """
 This file holds the master definitions for all cards in the game.
 The key is an integer Card ID.

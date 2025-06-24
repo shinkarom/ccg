@@ -8,6 +8,7 @@ import game_logic
 import pprint
 import numpy as np
 import collections
+from rich import print
 
 def deep_merge(base_dict, update_dict, create_new=False):
     """

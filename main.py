@@ -4,6 +4,7 @@ import os
 import random
 import time
 from enum import Enum, auto
+from rich import print
 
 # Our core game logic and AI
 from game_state import GameState, PlayerState
@@ -210,6 +211,8 @@ class GameApplication:
         
 
 if __name__ == "__main__":
+    from rich.traceback import install
+    install(show_locals=False)
     # The entry point is now extremely simple!
     app = GameApplication()
     app.run()

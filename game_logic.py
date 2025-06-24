@@ -5,6 +5,7 @@ from card_database import CARD_DB
 from abc import ABC, abstractmethod
 from phases import UpkeepPhase
 import random
+from rich import print
 
 def init_game(decks,opts={}):
     players = []

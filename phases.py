@@ -5,6 +5,8 @@ from game_state import GameState, UnitState, UnitCombatStatus
 if TYPE_CHECKING:
     from game_state import GameState
 
+from rich import print
+
 MAX_HAND_SIZE = 7
 # The maximum number of units a player can have on the board.
 # A fixed size is important for a predictable state structure.

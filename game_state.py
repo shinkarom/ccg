@@ -9,6 +9,8 @@ from enum import Enum, auto
 if TYPE_CHECKING:
     from phases import Phase, UpkeepPhase
 
+from rich import print
+
 BOARD_SIZE = 5
 
 class UnitCombatStatus(Enum):
