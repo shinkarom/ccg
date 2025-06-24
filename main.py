@@ -75,7 +75,8 @@ class GameRunner:
 
     def run_game(self):
         """Contains the main game loop."""
-        game_state = game_logic.init_game([generate_quick_deck(40), generate_quick_deck(40)])
+        d = generate_quick_deck(40)
+        game_state = game_logic.init_game([d.copy(), d.copy()])
         previous_player_idx = -1
 
         while True:
@@ -184,6 +185,8 @@ class GameApplication:
         human_player_index = next((i for i, p in enumerate(players) if p.is_human()), -1)
         if mode == GameMode.PVE:
             pov_provider = lambda current_idx: human_player_index
+        if mode == GameMode.AVA:
+            pov_provider = lambda current_idx: -1
         else:
             pov_provider = lambda current_idx: current_idx
             
