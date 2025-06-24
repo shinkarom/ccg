@@ -113,7 +113,7 @@ class ConsoleUI:
 
     def prompt_for_priority(self, player_number: int):
         """A generic prompt that waits for the player who has control."""
-        input(f"\n--- Player {player_number}, you have priority. --- \nPress Enter to continue...")
+        input(f"\n--- Priority passes to player {player_number}. --- \nPress Enter to continue...")
         
     def get_human_move(self, state: GameState) -> tuple:
         """

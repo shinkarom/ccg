@@ -2,15 +2,11 @@ from card_database import CARD_DB
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 from game_state import GameState, UnitState, UnitCombatStatus
+from shared import *
 if TYPE_CHECKING:
     from game_state import GameState
 
 from rich import print
-
-MAX_HAND_SIZE = 7
-# The maximum number of units a player can have on the board.
-# A fixed size is important for a predictable state structure.
-BOARD_SIZE = 7
 
 # --- Base Class ---
 class Phase(ABC):
@@ -64,7 +60,7 @@ class UpkeepPhase(Phase):
             if unit:
                 unit.is_ready = True
         
-        if len(player.hand) < MAX_HAND_SIZE:
+        while len(player.hand) < MAX_HAND_SIZE:
             player.draw_card()
         if len(player.hand) > MAX_HAND_SIZE:
             state.current_phase = DiscardPhase()
@@ -117,6 +113,7 @@ class MainPhase(Phase):
         player = state.players[state.current_player_index]
         opponent = state.players[1-state.current_player_index]
         if action_type == 'PLAY_UNIT':
+            
             # KEY CHANGE: Unpack the target slot index from the action
             hand_idx, slot_idx = action[1], action[2]
             
@@ -128,7 +125,8 @@ class MainPhase(Phase):
                 card_id=card_id,
                 current_attack=card_info['attack'],
                 current_health=card_info['health'],
-                is_ready=False
+                is_ready=False,
+                keywords = card_info["keywords"]
             )
             # KEY CHANGE: Place the unit in the specified slot
             player.board[slot_idx] = unit
@@ -199,13 +197,10 @@ class DeclareDefenderPhase(Phase):
         """Generates the choices for the defender."""
         legal_moves = []
         defender = state.players[state.current_player_index] # The current player IS the defender
-
-        # Option 1: Block with any of your units
         for blocker_slot_idx, unit in enumerate(defender.board):
-            if unit: # Can only block with existing units
+            if unit: 
                 legal_moves.append(('ASSIGN_BLOCKER', blocker_slot_idx))
 
-        # Option 2: Take the damage directly
         legal_moves.append(('TAKE_DAMAGE',))
 
         return legal_moves

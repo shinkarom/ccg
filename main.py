@@ -9,24 +9,10 @@ from rich import print
 # Our core game logic and AI
 from game_state import GameState, PlayerState
 from phases import UpkeepPhase
-from card_database import CARD_DB
 import game_logic
 from ccg_ai import CCG_AI
 from ui import ConsoleUI
-
-def generate_quick_deck(deck_size: int = 30) -> list[int]:
-    """
-    Creates a random deck of a given size by picking cards from the CARD_DB.
-    This is a simple replacement for a hardcoded deck list.
-    """
-    # Get all possible card IDs from your database.
-    all_card_ids = list(CARD_DB.keys())
-    
-    # Randomly choose `deck_size` cards from the list, with replacement.
-    # 'choices' is perfect for this, as it allows duplicates naturally.
-    deck = random.choices(all_card_ids, k=deck_size)
-    
-    return deck
+from deckgen import generate_quick_deck
 
 class GameMode(Enum):
     PVP = '1'
