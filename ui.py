@@ -33,73 +33,83 @@ class ConsoleUI:
             else:
                 print("Invalid choice. Please enter 1, 2, or 3.")
 
+    def _render_player_board(self, player_state: 'PlayerState', label: str):
+        """
+        Private helper method to render one player's side of the board.
+        Encapsulates the duplicated logic.
+        """
+        print(f"--- {label} SIDE (Player {player_state.number}) ---")
+        
+        # We can also render the player's stats here for better grouping.
+        # Note the hand size is public info, but the contents are not.
+        print(f"HP: {player_state.health:<3} | Resources: {player_state.resource:<2} | Hand: {len(player_state.hand):<2} | Deck: {len(player_state.deck):<2}")
+        
+        print("Board:")
+        for i, unit in enumerate(player_state.board):
+            if unit:
+                card = CARD_DB.get(unit.card_id, {})
+                # Determine status character
+                if unit.combat_status == UnitCombatStatus.ATTACKING:
+                    status_char = ">"
+                elif unit.combat_status == UnitCombatStatus.BLOCKING:
+                    status_char = "<"
+                elif unit.is_ready:
+                    status_char = "+"
+                else:
+                    status_char = "-"
+                
+                print(f" [{i+1}] {status_char} {card.get('name', 'Unknown')} ({unit.current_attack}/{unit.current_health})")
+            else:
+                # Print empty slot
+                print(f" [{i+1}] ")
+
     def render_game_state(self, state: GameState, pov_player_index: int):
         """
-        Prints the game state to the console.
-        - If human_player_index is a valid index, it renders from that player's perspective.
-        - If human_player_index is -1 (AI vs AI), it renders a neutral, top-down view.
+        Prints the game state to the console using a helper method to stay DRY.
         """
         self.clear_screen()
         
-        # --- CORRECTED: Determine Perspective and Labels ---
-        if pov_player_index != -1: # PvP or PvE mode
+        # --- Determine Perspective and Labels ---
+        if pov_player_index != -1: # Player-centric view (PvP or PvE)
             p_pov = state.players[pov_player_index]
             p_opp = state.players[1 - pov_player_index]
-            pov_string = "YOUR"
-            opp_string = "OPPONENT'S"
+            pov_label = "YOUR"
+            opp_label = "OPPONENT'S"
         else: # Neutral AI vs AI view
             p_pov = state.players[0]
             p_opp = state.players[1]
-            pov_string = "PLAYER 1'S"
-            opp_string = "PLAYER 2'S"
+            pov_label = "PLAYER 1'S"
+            opp_label = "PLAYER 2'S"
 
         print("="*50)
-        print(f"--- {opp_string} SIDE (Player {p_opp.number}) ---") # Assuming PlayerState has an ID
-        print(f"HP: {p_opp.health:<3} | Resources: {p_opp.resource:<2} | Hand: {len(p_opp.hand):<2} | Deck: {len(p_opp.deck):<2}")
-        print("Board:")
-        for i,unit in enumerate(p_opp.board):
-            if unit:
-                card = CARD_DB.get(unit.card_id, {})
-                r = "+" if unit.is_ready else "-"
-                if unit.combat_status == UnitCombatStatus.ATTACKING:
-                    r = ">"
-                elif unit.combat_status == UnitCombatStatus.BLOCKING:
-                    r = "<"
-                print(f" [{i+1}] {r} {card.get('name', 'Unknown')} ({unit.current_attack}/{unit.current_health})")
-            else:
-                print(f" [{i+1}] ")
+        
+        # --- CALL THE HELPER METHOD for the opponent ---
+        self._render_player_board(p_opp, opp_label)
         
         print("\n" + "-"*20 + " VS " + "-"*22 + "\n")
 
-        print(f"--- {pov_string} SIDE (Player {p_pov.number}) ---")
-        print("Board:")
-        for i,unit in enumerate(p_pov.board):
-            if unit:
-                card = CARD_DB.get(unit.card_id, {})
-                r = "+" if unit.is_ready else "-"
-                if unit.combat_status == UnitCombatStatus.ATTACKING:
-                    r = ">"
-                elif unit.combat_status == UnitCombatStatus.BLOCKING:
-                    r = "<"
-                print(f" [{i+1}] {r} {card.get('name', 'Unknown')} ({unit.current_attack}/{unit.current_health})")
-            else:
-                print(f" [{i+1}] ")
+        # --- CALL THE HELPER METHOD for the point-of-view player ---
+        self._render_player_board(p_pov, pov_label)
+        
+        print("-" * 50)
 
-        print("\nHand (for Player {}):".format(pov_player_index + 1))
-        player_with_pov = state.players[pov_player_index]
-        for i, card_id in enumerate(player_with_pov.hand):
-            card = CARD_DB.get(card_id, {})
-            print(f"  [{i+1}] {card.get('name', 'Unknown')} (Cost: {card.get('cost', '?')})")
-        print(f"HP: {p_pov.health:<3} | Resources: {p_pov.resource:<2} | Hand: {len(p_pov.hand):<2} | Deck: {len(p_pov.deck):<2}")
+        # --- Render the Hand (only for a specific POV) ---
+        if pov_player_index != -1:
+            print(f"Your Hand:")
+            player_with_pov = state.players[pov_player_index]
+            if not player_with_pov.hand:
+                print("  (empty)")
+            else:
+                for i, card_id in enumerate(player_with_pov.hand):
+                    card = CARD_DB.get(card_id, {})
+                    print(f"  [{i+1}] {card.get('name', 'Unknown')} (Cost: {card.get('cost', '?')})")
+        
         print("="*50)
         
-        # --- CORRECTED: Turn Status Logic ---
+        # --- Render Turn Status ---
         turn_status = f"Player {state.current_player_index + 1}'s Turn"
         if pov_player_index != -1:
-            if state.current_player_index == pov_player_index:
-                turn_status = "** YOUR TURN **"
-            else:
-                turn_status = "OPPONENT'S TURN"
+            turn_status = "** YOUR TURN **" if state.current_player_index == pov_player_index else "OPPONENT'S TURN"
             
         print(f"Turn {state.turn_number} | Phase: {state.current_phase.get_name()} | {turn_status}\n")
 
