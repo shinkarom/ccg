@@ -2,7 +2,7 @@ import os
 import time
 
 # We need to import the type hints for our game objects
-from game_state import GameState
+from game_state import GameState, UnitCombatStatus
 from card_database import CARD_DB
 
 class ConsoleUI:
@@ -61,9 +61,13 @@ class ConsoleUI:
             if unit:
                 card = CARD_DB.get(unit.card_id, {})
                 r = "+" if unit.is_ready else "-"
+                if unit.combat_status == UnitCombatStatus.ATTACKING:
+                    r = ">"
+                elif unit.combat_status == UnitCombatStatus.BLOCKING:
+                    r = "<"
                 print(f" [{i+1}] {r} {card.get('name', 'Unknown')} ({unit.current_attack}/{unit.current_health})")
             else:
-                print(f" [{i+1}] ---")
+                print(f" [{i+1}] ")
         
         print("\n" + "-"*20 + " VS " + "-"*22 + "\n")
 
@@ -73,9 +77,13 @@ class ConsoleUI:
             if unit:
                 card = CARD_DB.get(unit.card_id, {})
                 r = "+" if unit.is_ready else "-"
+                if unit.combat_status == UnitCombatStatus.ATTACKING:
+                    r = ">"
+                elif unit.combat_status == UnitCombatStatus.BLOCKING:
+                    r = "<"
                 print(f" [{i+1}] {r} {card.get('name', 'Unknown')} ({unit.current_attack}/{unit.current_health})")
             else:
-                print(f" [{i+1}] ---")
+                print(f" [{i+1}] ")
 
         print("\nHand (for Player {}):".format(pov_player_index + 1))
         player_with_pov = state.players[pov_player_index]

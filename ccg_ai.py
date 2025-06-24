@@ -7,6 +7,7 @@ from game_state import GameState
 import game_logic
 import pprint
 import numpy as np
+import collections
 
 def deep_merge(base_dict, update_dict, create_new=False):
     """
@@ -48,7 +49,7 @@ class CCG_AI:
         "temperature": 0.1,
         "blunder_chance": 0.0,
         "recon_depth": 10,
-        "probes_per_world": 1,
+        "probes_per_world": 10,
         "certainty_exponent": 1.0,
         "variance_weight": 0.0,
         

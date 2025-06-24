@@ -30,7 +30,7 @@ CARD_DB = {
         'cost': 3,
         'attack': 2,
         'health': 4,
-        'keywords': {'TAUNT'},  # Taunt forces enemies to attack this unit.
+        'keywords': {'GUARD'},
         'text': "Taunt."
     },
     3: {

@@ -5,11 +5,16 @@ import random
 from dataclasses import dataclass, field
 from typing import List, Optional, Set, Dict, Tuple
 from typing import TYPE_CHECKING
-
+from enum import Enum, auto
 if TYPE_CHECKING:
     from phases import Phase, UpkeepPhase
 
 BOARD_SIZE = 5
+
+class UnitCombatStatus(Enum):
+    IDLE = auto()      # The default state, not involved in current combat
+    ATTACKING = auto() # The unit declared as an attacker this action
+    BLOCKING = auto()  # The unit chosen to block this action
 
 @dataclass
 class UnitState:
@@ -18,6 +23,7 @@ class UnitState:
     current_attack: int
     current_health: int
     is_ready: bool
+    combat_status: UnitCombatStatus = UnitCombatStatus.IDLE
     keywords: Set[str] = field(default_factory=set)
 
 @dataclass
