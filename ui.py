@@ -156,6 +156,14 @@ class ConsoleUI:
         print(f"\nAI is thinking... (completed {rollouts} simulations)")
         print(f"AI chose: {description}")
         time.sleep(1.5)
+        
+    def display_ai_suggestion(self, action: tuple, rollouts: int):
+        """Announces the AI's move."""
+        description = str(action)
+        if len(action) > 2 and isinstance(action[2], str):
+            description = action[2]
+            
+        print(f"After {rollouts} rollouts Advisor suggests: {description}")
 
     def display_game_over(self, winner_index: int):
         """Prints the final game over message."""
