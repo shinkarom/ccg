@@ -57,27 +57,32 @@ class ConsoleUI:
         print(f"--- {opp_string} SIDE (Player {p_opp.number}) ---") # Assuming PlayerState has an ID
         print(f"HP: {p_opp.health:<3} | Resources: {p_opp.resource:<2} | Hand: {len(p_opp.hand):<2} | Deck: {len(p_opp.deck):<2}")
         print("Board:")
-        if not p_opp.board: print("  (empty)")
-        for unit in p_opp.board:
-            card = CARD_DB.get(unit.card_id, {})
-            print(f"  > {card.get('name', 'Unknown')} ({unit.current_attack}/{unit.current_health})")
+        for i,unit in enumerate(p_opp.board):
+            if unit:
+                card = CARD_DB.get(unit.card_id, {})
+                r = "+" if unit.is_ready else "-"
+                print(f" [{i+1}] {r} {card.get('name', 'Unknown')} ({unit.current_attack}/{unit.current_health})")
+            else:
+                print(f" [{i+1}] ---")
         
         print("\n" + "-"*20 + " VS " + "-"*22 + "\n")
 
         print(f"--- {pov_string} SIDE (Player {p_pov.number}) ---")
         print("Board:")
-        if not p_pov.board: print("  (empty)")
-        for unit in p_pov.board:
-            card = CARD_DB.get(unit.card_id, {})
-            print(f"  > {card.get('name', 'Unknown')} ({unit.current_attack}/{unit.current_health})")
-        print(f"HP: {p_pov.health:<3} | Resources: {p_pov.resource:<2} | Deck: {len(p_pov.deck):<2}")
+        for i,unit in enumerate(p_pov.board):
+            if unit:
+                card = CARD_DB.get(unit.card_id, {})
+                r = "+" if unit.is_ready else "-"
+                print(f" [{i+1}] {r} {card.get('name', 'Unknown')} ({unit.current_attack}/{unit.current_health})")
+            else:
+                print(f" [{i+1}] ---")
 
         print("\nHand (for Player {}):".format(pov_player_index + 1))
         player_with_pov = state.players[pov_player_index]
         for i, card_id in enumerate(player_with_pov.hand):
             card = CARD_DB.get(card_id, {})
             print(f"  [{i+1}] {card.get('name', 'Unknown')} (Cost: {card.get('cost', '?')})")
-        
+        print(f"HP: {p_pov.health:<3} | Resources: {p_pov.resource:<2} | Hand: {len(p_pov.hand):<2} | Deck: {len(p_pov.deck):<2}")
         print("="*50)
         
         # --- CORRECTED: Turn Status Logic ---

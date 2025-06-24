@@ -65,22 +65,30 @@ class MainPhase(Phase):
         # This is your familiar "Develop or Deploy" logic
         legal_moves = []
         player = state.players[state.current_player_index]
-        for i, card_id in enumerate(player.hand):
+        opponent = state.players[1-state.current_player_index]
+        for hand_idx, card_id in enumerate(player.hand):
             card_info = CARD_DB[card_id]
             if player.resource >= card_info['cost']:
                 if card_info['type'] == 'UNIT':
-                    if len(player.board)<BOARD_SIZE-1:
-                        legal_moves.append(('PLAY_UNIT', i))
+                    # KEY CHANGE: Generate a move for EACH empty slot
+                    for slot_idx, slot in enumerate(player.board):
+                        if slot is None:
+                            # The move now includes the target slot index
+                            legal_moves.append(('PLAY_UNIT', hand_idx, slot_idx))
                 elif card_info['type'] == 'ACTION':
-                    # Simplified targeting
-                    legal_moves.append(('PLAY_ACTION', i))
+                    legal_moves.append(('PLAY_ACTION', hand_idx))
 
-        # --- Attacking with ready units ---
-        if any(u for u in player.board if u is not None):
-             legal_moves.append(('ATTACK_ALL',))
+        # 2. Individual Attack moves
+        # The logic here remains the same, but the indices now refer to
+        # stable slot positions, not shifting list indices.
+        for attacker_slot_idx, attacker in enumerate(player.board):
+            if attacker and attacker.is_ready:
+                for defender_slot_idx, defender in enumerate(opponent.board):
+                    if defender:
+                        legal_moves.append(('ATTACK_UNIT', attacker_slot_idx, defender_slot_idx))
+                legal_moves.append(('ATTACK_PLAYER', attacker_slot_idx))
              
-        for i in range(len(player.hand)):
-            legal_moves.append(('DISCARD', i))
+        legal_moves.append(('PASS', ))
             
         return legal_moves
 
@@ -92,8 +100,24 @@ class MainPhase(Phase):
         
         action_type = action[0]
         player = state.players[state.current_player_index]
-
-        if action_type in ('PLAY_UNIT', 'PLAY_ACTION'):
+        opponent = state.players[1-state.current_player_index]
+        if action_type == 'PLAY_UNIT':
+            # KEY CHANGE: Unpack the target slot index from the action
+            hand_idx, slot_idx = action[1], action[2]
+            
+            card_id = player.hand.pop(hand_idx)
+            card_info = CARD_DB[card_id]
+            player.resource -= card_info['cost']
+            
+            unit = UnitState(
+                card_id=card_id,
+                current_attack=card_info['attack'],
+                current_health=card_info['health'],
+                is_ready=False
+            )
+            # KEY CHANGE: Place the unit in the specified slot
+            player.board[slot_idx] = unit
+        elif action_type == 'PLAY_ACTION':
             ind = action[1]
             
             # --- VALIDATION PHASE ---
@@ -115,82 +139,40 @@ class MainPhase(Phase):
             
             # b. Pay cost and move to graveyard.
             player.resource -= card_info['cost']
+            
             player.graveyard.append(card_id)
+
+        elif action_type == 'ATTACK_UNIT':
+            attacker_slot_idx, defender_slot_idx = action[1], action[2]
+            attacker = player.board[attacker_slot_idx]
+            defender = opponent.board[defender_slot_idx]
             
-            # c. Put the unit on the board if applicable.
-            if action_type == 'PLAY_UNIT':
-                u = UnitState(
-                    card_id=card_id,
-                    current_attack=card_info['attack'],
-                    current_health=card_info['health'],
-                    # Robustly handle optional keywords and create a copy to prevent aliasing.
-                    keywords=card_info.get('keywords', set()).copy()
-                )
-                player.board.append(u)
+            defender.current_health -= attacker.current_attack
+            attacker.current_health -= defender.current_attack
+            attacker.is_ready = False
 
-        elif action_type == 'DISCARD':
-            hand_index = action[1]
+            # KEY CHANGE: When a unit dies, its slot becomes None.
+            # The board is NOT resized.
+            if attacker.current_health <= 0:
+                player.graveyard.append(attacker.card_id)
+                player.board[attacker_slot_idx] = None
+            if defender.current_health <= 0:
+                opponent.graveyard.append(defender.card_id)
+                opponent.board[defender_slot_idx] = None
             
-            # Validation
-            if hand_index >= len(player.hand):
-                raise IndexError(f"MCTS Desync: Tried to discard from hand index {hand_index}, but hand size is {len(player.hand)}.")
-
-            # Move the card from hand to graveyard
-            card_to_discard = player.hand.pop(hand_index)
-            player.graveyard.append(card_to_discard)
-            player.draw_card()
+            return self
+        
+        elif action_type == 'ATTACK_PLAYER':
+            attacker_slot_idx = action[1]
+            attacker = player.board[attacker_slot_idx]
             
-            # Grant the resource
-            player.resource += 1
+            opponent.health -= attacker.current_attack
+            attacker.is_ready = False
+        
+        elif action_type == "PASS":
+            return UpkeepPhase()
 
-        elif action_type == 'ATTACK_ALL':
-            player = state.players[state.current_player_index]
-            opponent = state.players[1 - state.current_player_index]
-
-            # --- Step 1: Calculate total incoming damage from all ready attackers ---
-            total_incoming_damage = 0
-            for unit in player.board:
-                if unit:
-                    total_incoming_damage += unit.current_attack
-                    unit.is_ready = False # Attacking exhausts them, this is correct.
-
-            # --- Step 2: Opponent's board absorbs the damage ---
-            # We iterate through the opponent's board to apply damage.
-            # A copy is needed if we modify the list while looping, e.g. `for unit in opponent.board[:]:`
-            # but here we just modify unit health, which is fine.
-            for target_unit in opponent.board:
-                if target_unit and total_incoming_damage > 0:
-                    # The target unit takes damage up to its health
-                    damage_to_deal = min(total_incoming_damage, target_unit.current_health)
-                    
-                    target_unit.current_health -= damage_to_deal
-                    total_incoming_damage -= damage_to_deal # Reduce the damage pool
-
-            # --- Step 3: Remove any units that died ---
-            # We need to build a new board list to avoid mutation-during-iteration issues.
-            new_opponent_board = []
-            for unit in opponent.board:
-                if unit: # Check if the slot had a unit
-                    if unit.current_health > 0:
-                        new_opponent_board.append(unit)
-                    else:
-                        # The unit died, put it in the graveyard
-                        opponent.graveyard.append(unit.card_id)
-                else:
-                    new_opponent_board.append(None) # The slot was already empty
-            
-            r = len(new_opponent_board) - len(opponent.board)
-            if r > 0:
-                print(f"COMBAT REPORT: {r} units neutralized.")
-            
-            # Replace the old board with the new one
-            opponent.board = new_opponent_board
-
-            # --- Step 4: Any leftover damage hits the opponent's hero ---
-            if total_incoming_damage > 0:
-                opponent.health -= total_incoming_damage
-
-        return UpkeepPhase()
+        return self
 
 class UpkeepPhase(Phase):
     """A phase that runs automatically and transitions immediately."""
@@ -213,6 +195,14 @@ class UpkeepPhase(Phase):
         state.current_player_index = (state.current_player_index+1)%len(state.players)
         player = state.players[state.current_player_index]
         
+        player.resource = min(10, player.resource+1)
+        
+        for unit in player.board: 
+            if unit:
+                unit.is_ready = True
+        
+        if len(player.hand) < MAX_HAND_SIZE:
+            player.draw_card()
         if len(player.hand) > MAX_HAND_SIZE:
             state.current_phase = DiscardPhase()
         else:

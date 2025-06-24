@@ -8,6 +8,32 @@ import game_logic
 import pprint
 import numpy as np
 
+def deep_merge(base_dict, update_dict, create_new=False):
+    """
+    Recursively merges two dictionaries.
+
+    :param base_dict: The dictionary to be updated.
+    :param update_dict: The dictionary with new values.
+    :param create_new: If True, returns a new dictionary. Otherwise, modifies base_dict in-place.
+    :return: The merged dictionary.
+    """
+    # Create a new dictionary if requested, otherwise modify in-place
+    target_dict = copy.deepcopy(base_dict) if create_new else base_dict
+
+    for key, value in update_dict.items():
+        # Use collections.abc.Mapping for broader dictionary-like type checking
+        is_mapping = isinstance(target_dict.get(key), collections.abc.Mapping) and \
+                     isinstance(value, collections.abc.Mapping)
+
+        if is_mapping:
+            # Recurse into the nested dictionary, ensuring it's a new copy if needed
+            target_dict[key] = deep_merge(target_dict[key], value, create_new=create_new)
+        else:
+            # Overwrite the value
+            target_dict[key] = copy.deepcopy(value) if create_new else value
+            
+    return target_dict
+
 class CCG_AI:
     """
     A Monte Carlo-based AI for a Collectible Card Game (CCG).
@@ -22,7 +48,7 @@ class CCG_AI:
         "temperature": 0.1,
         "blunder_chance": 0.0,
         "recon_depth": 10,
-        "probes_per_world": 10,
+        "probes_per_world": 1,
         "certainty_exponent": 1.0,
         "variance_weight": 0.0,
         
@@ -52,7 +78,7 @@ class CCG_AI:
         """Updates the AI's configuration from a dictionary of options."""
         if not isinstance(options, dict):
             raise TypeError("options must be a dictionary.")
-        self.options.update(options)
+        deep_merge(self.options, options)
     
     def normalize_score_diff(self, my_score: float, opp_score: float) -> float:
         """Normalizes a score difference into a 0.0-1.0 reward for MCTS."""

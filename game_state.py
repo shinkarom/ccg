@@ -9,12 +9,15 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from phases import Phase, UpkeepPhase
 
+BOARD_SIZE = 5
+
 @dataclass
 class UnitState:
     """Represents a single unit on the board."""
     card_id: int
     current_attack: int
     current_health: int
+    is_ready: bool
     keywords: Set[str] = field(default_factory=set)
 
 @dataclass
@@ -23,13 +26,14 @@ class PlayerState:
     health: int = 20
     resource: int = 0
     number: int = 0
-    # We store card IDs (integers) not full card objects, to keep the state light.
+
     deck: List[int] = field(default_factory=list)
     hand: List[int] = field(default_factory=list)
     graveyard: List[int] = field(default_factory=list)
     
-    # The board is a fixed-size list, which simplifies AI logic.
-    board: List[UnitState] = field(default_factory=list)
+    board: List[Optional['UnitState']] = field(
+        default_factory=lambda: [None] * BOARD_SIZE
+    )
     
     def draw_card(self):
         """
@@ -37,12 +41,6 @@ class PlayerState:
         If the deck is empty, shuffles the graveyard to form a new deck
         before drawing. Does nothing if hand is full or no cards are available.
         """
-        # A global constant for max hand size is good practice
-        MAX_HAND_SIZE = 7 # Or whatever you have defined
-
-        if len(self.hand) >= MAX_HAND_SIZE:
-            # Can't draw if hand is full.
-            return
 
         # --- THE CORE NEW LOGIC ---
         if not self.deck:
@@ -213,8 +211,9 @@ class GameState:
         board_health_w = weights["board_health"]
 
         for unit in player.board:
-            total_score += (unit.current_attack * board_attack_w)
-            total_score += (unit.current_health * board_health_w)
+            if unit:
+                total_score += (unit.current_attack * board_attack_w)
+                total_score += (unit.current_health * board_health_w)
             
         # You could easily add more terms here, e.g., hand size
         # hand_size = len(player.hand)
