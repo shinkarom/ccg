@@ -30,8 +30,8 @@ class AppState(Enum):
     EXITING = auto()
 
 # --- Centralized Configuration (from previous step) ---
-CONTROLLER_AI_CONFIG = {"time_limit_ms": 500} # The AI that plays for itself
-ADVISOR_AI_CONFIG = {"time_limit_ms": 250}   # A faster AI for quick suggestions
+CONTROLLER_AI_CONFIG = {"evaluation_limit": 100} # The AI that plays for itself
+ADVISOR_AI_CONFIG = {"evaluation_limit": 10}   # A faster AI for quick suggestions
 MODE_PLAYER_SETUP = {
     GameMode.PVP: [PlayerType.HUMAN, PlayerType.HUMAN],
     GameMode.PVE: [PlayerType.HUMAN, PlayerType.AI],

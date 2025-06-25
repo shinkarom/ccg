@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 from game_state import GameState, UnitState, UnitCombatStatus
 from shared import *
+import random
 if TYPE_CHECKING:
     from game_state import GameState
 
@@ -45,12 +46,6 @@ class UpkeepPhase(Phase):
         """This phase's logic runs automatically upon entry."""
         
         state.turn_number += 1
-        for i in state.players:
-            if state.turn_number == 1:
-                while len(i.hand) < MAX_HAND_SIZE:
-                    #i.hand.append(i.deck.pop()) 
-                    i.draw_card()
-        
         state.current_player_index = (state.current_player_index+1)%len(state.players)
         player = state.players[state.current_player_index]
         
@@ -59,15 +54,15 @@ class UpkeepPhase(Phase):
         for unit in player.board: 
             if unit:
                 unit.is_ready = True
-        
-        while len(player.hand) < MAX_HAND_SIZE:
-            player.draw_card()
-        if len(player.hand) > MAX_HAND_SIZE:
-            state.current_phase = DiscardPhase()
-        else:
-            state.current_phase = MainPhase()
-        
-        # Immediately run the on_enter for the new phase if it has one
+                
+        for i in state.players:
+            state.deck.extend(i.hand)
+            i.hand.clear()
+        random.shuffle(state.deck)
+        for i in state.players:        
+            while state.deck and len(i.hand) < MAX_HAND_SIZE:
+                state.draw_card(i)
+        state.current_phase = MainPhase()
         state.current_phase.on_enter(state)
 
     def process_action(self, state, action: tuple) -> 'Phase':
@@ -94,10 +89,6 @@ class MainPhase(Phase):
                             legal_moves.append(('PLAY_UNIT', hand_idx, slot_idx))
                 elif card_info['type'] == 'ACTION':
                     legal_moves.append(('PLAY_ACTION', hand_idx))
-
-        for attacker_slot_idx, attacker in enumerate(player.board):
-            if attacker and attacker.is_ready:
-                legal_moves.append(('DECLARE_ATTACK', attacker_slot_idx))
              
         legal_moves.append(('PASS', ))
         
@@ -153,103 +144,47 @@ class MainPhase(Phase):
             # b. Pay cost and move to graveyard.
             player.resource -= card_info['cost']
             
-            player.graveyard.append(card_id)
-
-        elif action_type == 'DECLARE_ATTACK':
-            attacker_slot_idx = action[1]
-            
-            # Safety check
-            attacker = player.board[attacker_slot_idx]
-            if not attacker:
-                 raise ValueError("Attempted to attack with an empty slot.")
-
-            attacker.combat_status = UnitCombatStatus.ATTACKING
-
-            original_attacker_idx = state.current_player_index
-            
-            # Give priority to the defender
-            state.current_player_index = 1 - original_attacker_idx
-            
-            # Transition to the new phase, passing the necessary context
-            return DeclareDefenderPhase(
-                attacking_player_idx=original_attacker_idx,
-                attacker_slot_idx=attacker_slot_idx
-            )
+            state.graveyard.append(card_id)
         
         elif action_type == "PASS":
-            return UpkeepPhase()
+            return CombatPhase()
 
-        return self
+        return CombatPhase()
 
-class DeclareDefenderPhase(Phase):
-    """
-    A temporary phase where the defending player chooses how to handle an incoming attack.
-    """
-    def __init__(self, attacking_player_idx: int, attacker_slot_idx: int):
-        # We need to remember who initiated the attack
-        self.attacking_player_idx = attacking_player_idx
-        self.attacker_slot_idx = attacker_slot_idx
-        
+class CombatPhase(Phase):
     def get_name(self):
-        return "Declare Defender"
-
+        return "Combat"
+        
+    def on_enter(self, state):
+        player1 = state.players[0]
+        player2 = state.players[1]
+        for i in range(BOARD_SIZE):
+            u1 = player1.board[i]
+            u2 = player2.board[i]
+            if not u1 and not u2:
+                continue
+            if not u1:
+                player1.health -= u2.current_attack
+                continue
+            if not u2:
+                player2.health -= u1.current_attack
+                continue
+            u1.current_health -= u2.current_attack
+            u2.current_health -= u1.current_attack
+            if u1.current_health <= 0:
+                state.graveyard.append(u1.card_id)
+                player1.board[i] = None
+            if u2.current_health <= 0:
+                state.graveyard.append(u2.card_id)
+                player2.board[i] = None
+        
+        state.current_phase = UpkeepPhase()
+        state.current_phase.on_enter(state)
+        
     def get_legal_moves(self, state) -> list:
-        """Generates the choices for the defender."""
-        legal_moves = []
-        defender = state.players[state.current_player_index] # The current player IS the defender
-        for blocker_slot_idx, unit in enumerate(defender.board):
-            if unit: 
-                legal_moves.append(('ASSIGN_BLOCKER', blocker_slot_idx))
-
-        legal_moves.append(('TAKE_DAMAGE',))
-
-        return legal_moves
-
+        return []
+        
     def process_action(self, state, action: tuple) -> 'Phase':
-        action_type = action[0]
+        raise Exception("Cannot process action in an automatic phase.")
         
-        # Get the attacker and defender from the context stored in the phase and state
-        attacker_player = state.players[self.attacking_player_idx]
-        defender_player = state.players[1 - self.attacking_player_idx] # The opponent of the attacker
         
-        attacker = attacker_player.board[self.attacker_slot_idx]
-        blocker = None
-        
-        if not attacker:
-            # Safety check: if the attacker was somehow removed, the attack fizzles.
-            print("Attack fizzled: Attacker is no longer on the board.")
-            state.current_player_index = self.attacking_player_idx
-            return MainPhase()
-        elif action_type == 'ASSIGN_BLOCKER':
-            blocker_slot_idx = action[1]
-            blocker = defender_player.board[blocker_slot_idx]
-            
-            if blocker:
-                blocker.combat_status = UnitCombatStatus.BLOCKING
-            
-            # Retaliatory combat
-            blocker.current_health -= attacker.current_attack
-            attacker.current_health -= blocker.current_attack
-            
-            # Check for deaths
-            if attacker.current_health <= 0:
-                attacker_player.graveyard.append(attacker.card_id)
-                attacker_player.board[self.attacker_slot_idx] = None
-            if blocker.current_health <= 0:
-                defender_player.graveyard.append(blocker.card_id)
-                defender_player.board[blocker_slot_idx] = None
-
-        elif action_type == 'TAKE_DAMAGE':
-            defender_player.health -= attacker.current_attack
-
-        attacker.combat_status = UnitCombatStatus.IDLE
-        if blocker:
-            blocker.combat_status = UnitCombatStatus.IDLE
-
-        # Mark the attacker as exhausted for the rest of their turn
-        if attacker:
-            attacker.is_ready = False
-            
-        # KEY: Return control to the original attacker
-        state.current_player_index = self.attacking_player_idx
-        return MainPhase()

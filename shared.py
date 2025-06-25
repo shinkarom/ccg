@@ -7,4 +7,4 @@ class GameMode(Enum):
     AVA = '3'
     
 MAX_HAND_SIZE = 7
-BOARD_SIZE = 7
+BOARD_SIZE = 5

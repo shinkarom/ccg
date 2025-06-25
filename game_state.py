@@ -8,10 +8,8 @@ from typing import TYPE_CHECKING
 from enum import Enum, auto
 if TYPE_CHECKING:
     from phases import Phase, UpkeepPhase
-
+from shared import *
 from rich import print
-
-BOARD_SIZE = 5
 
 class UnitCombatStatus(Enum):
     IDLE = auto()      # The default state, not involved in current combat
@@ -35,38 +33,11 @@ class PlayerState:
     resource: int = 0
     number: int = 0
 
-    deck: List[int] = field(default_factory=list)
     hand: List[int] = field(default_factory=list)
-    graveyard: List[int] = field(default_factory=list)
     
     board: List[Optional['UnitState']] = field(
         default_factory=lambda: [None] * BOARD_SIZE
     )
-    
-    def draw_card(self):
-        """
-        Draws one card, adding it to the hand.
-        If the deck is empty, shuffles the graveyard to form a new deck
-        before drawing. Does nothing if hand is full or no cards are available.
-        """
-
-        # --- THE CORE NEW LOGIC ---
-        if not self.deck:
-            # Deck is empty! Check the graveyard.
-            if not self.graveyard:
-                # No cards in deck OR graveyard. Cannot draw.
-                return
-            
-            # Reshuffle the graveyard into the deck.
-            print(f"Player's deck is empty. Reshuffling {len(self.graveyard)} cards from graveyard.")
-            self.deck = self.graveyard
-            self.graveyard = [] # The graveyard is now empty
-            random.shuffle(self.deck)
-        # --- END OF NEW LOGIC ---
-        
-        # Draw the top card from the deck and add it to the hand.
-        card_id = self.deck.pop(0) # pop(0) takes from the "top" of the deck
-        self.hand.append(card_id)
 
 @dataclass
 class GameState:
@@ -74,7 +45,8 @@ class GameState:
     players: List[PlayerState]
     current_player_index: int = -1
     turn_number: int = 0
-    
+    deck: List[int] = field(default_factory=list)
+    graveyard: List[int] = field(default_factory=list)
     current_phase: "Phase" = None
     
     def clone(self) -> 'GameState':
@@ -126,26 +98,21 @@ class GameState:
             -1: If the game is still ongoing.
             -2: If the game is a draw.
         """
+        if self.turn_number >= 50:
+            return -2
         p1 = self.players[0]
         p2 = self.players[1]
 
         # Check for health-based win/loss conditions
-        p1_has_lost = (p1.health <= 0)
-        p2_has_lost = (p2.health <= 0)
-
-        if p1_has_lost and p2_has_lost:
+        p1_no_health = (p1.health <= 0)
+        p2_no_health = (p2.health <= 0)
+        #print(p1_no_health, p2_no_health)
+        if p1_no_health and p2_no_health:
             return -2 # Draw condition
-        if p1_has_lost:
+        if p1_no_health:
             return 1 # Player 2 wins
-        if p2_has_lost:
+        if p2_no_health:
             return 0 # Player 1 wins
-
-        # You could add other conditions here, such as fatigue from an empty deck.
-        # For example, if a "drew_from_empty_deck" flag was set on the player state:
-        # p1_fatigued = p1.drew_from_empty_deck
-        # p2_fatigued = p2.drew_from_empty_deck
-        # if p1_fatigued: return 1
-        # if p2_fatigued: return 0
 
         # If no win/loss conditions are met, the game continues.
         return -1
@@ -169,12 +136,11 @@ class GameState:
         #    This is the opponent's actual hand + their deck.
         opponent_hand_pool = []
         opponent_hand_pool.extend(p_opp.hand)
-        opponent_hand_pool.extend(p_opp.deck)
+        opponent_hand_pool.extend(self.deck)
         random.shuffle(opponent_hand_pool)
         
         # 4. Clear the opponent's hand and deck to re-deal.
         p_opp.hand = []
-        p_opp.deck = []
 
         # 5. Re-deal the opponent's hand from their shuffled pool.
         opponent_hand_size = len(self.players[1 - player_index].hand)
@@ -183,13 +149,7 @@ class GameState:
                 p_opp.hand.append(opponent_hand_pool.pop(0))
         
         # 6. The rest of the opponent's pool becomes their new shuffled deck.
-        p_opp.deck = opponent_hand_pool
-        
-        # --- Part B: Shuffle the AI's Own Deck ---
-        
-        # 7. The AI's hand is KNOWN and is not touched.
-        #    We just need to shuffle the contents of its deck.
-        random.shuffle(p_self.deck)
+        self.deck = opponent_hand_pool
 
         return determined_state
         
@@ -201,62 +161,16 @@ class GameState:
         """
         return self.get_winner_index() != -1
         
-    def _calculate_single_player_score(self, player_index: int, weights: dict) -> float:
+    def draw_card(self,player):
         """
-        Calculates a raw, un-normalized score for a single player based on a given weight dictionary.
-        This is the core evaluation helper.
+        Draws one card, adding it to the hand.
+        If the deck is empty, shuffles the graveyard to form a new deck
+        before drawing. Does nothing if hand is full or no cards are available.
         """
-        if not weights: return 0.0
-
-        player = self.players[player_index]
-        total_score = 0.0
         
-        # --- Resilience Score (Health) ---
-        total_score += player.health * weights["health"]
-
-        # --- Threat Score (Board) ---
-        board_attack_w = weights["board_attack"]
-        board_health_w = weights["board_health"]
-
-        for unit in player.board:
-            if unit:
-                total_score += (unit.current_attack * board_attack_w)
-                total_score += (unit.current_health * board_health_w)
-            
-        # You could easily add more terms here, e.g., hand size
-        # hand_size = len(player.hand)
-        # total_score += hand_size * weights.get("hand_w", 0.0)
+        if not self.deck:
+            return
         
-        return total_score    
-        
-    def get_score(self, eval_weights: dict) -> float:
-        """
-        Calculates a final, normalized score for MCTS using a personality profile.
-        Supports both symmetrical (one dict) and asymmetrical (two dicts) evaluation.
-        """
-        if self.is_terminal():
-            winner = self.get_winner_index()
-            if winner == self.current_player_index: return 1.0  # I (current player) won
-            if winner is not None: return -1.0 # I (current player) lost
-            return 0.0
-
-        my_player_index = self.current_player_index
-        opp_player_index = 1 - my_player_index
-
-        my_weights = eval_weights.get("my_eval", {})
-        # A more concise way to handle the symmetrical case
-        is_symmetrical = eval_weights.get("symmetrical", False)
-        opp_weights = my_weights if is_symmetrical else eval_weights.get("opp_eval", {})
-
-        # Step 3: Calculate subjective scores (this part is now more flexible)
-        my_subjective_score = self._calculate_single_player_score(my_player_index, my_weights)
-        opp_subjective_score = self._calculate_single_player_score(opp_player_index, opp_weights)
-        
-        raw_score = my_subjective_score - opp_subjective_score
-
-        # Step 4: Normalization (unchanged)
-        max_score_swing = eval_weights["max_score_swing"]
-        clamped_score = max(-max_score_swing, min(max_score_swing, raw_score))
-        normalized_score = clamped_score / max_score_swing
-        
-        return normalized_score
+        # Draw the top card from the deck and add it to the hand.
+        card_id = self.deck.pop(0) # pop(0) takes from the "top" of the deck
+        player.hand.append(card_id)

@@ -44,30 +44,13 @@ class CCG_AI:
     """
     DEFAULT_OPTIONS = {
         "max_score_swing": 100.0,
-        "time_limit_ms": 1000,
+        "time_limit_ms": float("inf"),
         "evaluation_limit": float("inf"),
         "exploration_weight": 1.41,
         "temperature": 0.1,
         "blunder_chance": 0.0,
-        "recon_depth": 10,
-        "probes_per_world": 10,
         "certainty_exponent": 1.0,
         "variance_weight": 0.0,
-        
-        "eval_weights": {
-            "max_score_swing": 100.0,
-            "symmetrical": False,
-            "my_eval": {
-                "health": 1.0,
-                "board_attack": 1.0,
-                "board_health": 1.0,
-            },
-            "opp_eval": {
-                "health": 1.0,
-                "board_attack": 1.0,
-                "board_health": 1.0,
-            },
-        }
     }
     
     def __init__(self, options: dict = None):
@@ -112,43 +95,6 @@ class CCG_AI:
             return max(move_stats, key=lambda m: move_stats[m]["visits"])
 
         return random.choices(moves, weights=weights, k=1)[0]
-
-    def run_recon_playout(self, start_state: 'GameState', depth_limit: int) -> 'GameState':
-        """
-        Runs a short, random playout to explore the near future.
-        This version includes "Forced Move" optimization, where moves are not
-        counted against the depth limit if there is only one legal option.
-        """      
-        current_state = start_state.clone()
-        
-        # Use a variable to track our remaining "decision depth"
-        remaining_depth = depth_limit
-
-        # The loop continues as long as we have depth and the game isn't over.
-        while remaining_depth > 0:
-            if current_state.is_terminal():
-                break
-
-            legal_moves = current_state.get_legal_moves()
-            
-            if not legal_moves:
-                break
-            
-            # --- THE CORE IMPROVEMENT ---
-            if len(legal_moves) == 1:
-                # This is a forced move.
-                action = legal_moves[0]
-                # We do NOT decrement remaining_depth here. The move is "free".
-            else:
-                # There is a choice to be made.
-                action = random.choice(legal_moves)
-                # We only "spend" our depth budget when making a real choice.
-                remaining_depth -= 1
-            # --- END OF IMPROVEMENT ---
-                
-            current_state = current_state.process_action(action)
-                
-        return current_state
     
     def find_best_move(self, initial_state: 'GameState') -> tuple:
         """
@@ -157,11 +103,12 @@ class CCG_AI:
         """
         # --- 1. SETUP ---
         # Direct access is safe now that defaults are well-defined.
-        time_limit = self.options["time_limit_ms"] / 1000.0
+        if self.options["time_limit_ms"] != float("inf"):
+            time_limit = self.options["time_limit_ms"] / 1000.0
+        else:
+            time_limit = float("inf")
         evaluation_limit = self.options["evaluation_limit"]
-        probes_per_world = self.options["probes_per_world"]
         exploration_constant_C = self.options["exploration_weight"]
-        recon_depth_limit = self.options["recon_depth"]
         variance_weight = self.options["variance_weight"]
         certainty_exp = self.options["certainty_exponent"]
 
@@ -181,11 +128,11 @@ class CCG_AI:
         player_index = initial_state.current_player_index
         # --- 3. MAIN SEARCH LOOP ---
         while True:
-            if (time.time() - start_time) >= time_limit: break
+            if (time.time() - start_time) >= time_limit: 
+                print((time.time() - start_time),time_limit)
+                break
             if total_evaluation_count >= evaluation_limit: break
-            
-            if total_evaluation_count % probes_per_world == 0:
-                current_determinized_state = initial_state.determinize(initial_state.current_player_index)
+            current_determinized_state = initial_state.determinize(initial_state.current_player_index)
 
             # --- b. Select Move to Probe (using UCB-Tuned) ---
             best_move_to_probe = None
@@ -208,11 +155,19 @@ class CCG_AI:
             
             # --- c. Perform the Probe ---
             state_after_move = current_determinized_state.process_action(best_move_to_probe)
-            final_recon_state = self.run_recon_playout(state_after_move, recon_depth_limit)
+            while not state_after_move.is_terminal():
+                legal_moves = state_after_move.get_legal_moves()
+                
+                if not legal_moves:
+                    break
+                action = random.choice(legal_moves)  
+               # print(f"applying {action}")  
+                state_after_move = state_after_move.process_action(action)
+              #  for i in state_after_move.players:
+              #      print(f"player {i.number} has {i.health} health")
+             #   print("after turn ",state_after_move.turn_number,"winner?",state_after_move.get_winner_index())
             
-            reward = final_recon_state.get_score(self.options["eval_weights"])
-            if final_recon_state.current_player_index != player_index:
-                reward = -reward
+            reward = 1 if state_after_move.get_winner_index == player_index else 0
             
             certainty_exp = self.options["certainty_exponent"]
             if certainty_exp != 1.0:
