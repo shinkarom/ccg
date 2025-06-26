@@ -12,11 +12,11 @@ def init_game(decks,opts={}):
     for j, i in enumerate(decks):
         p = PlayerState()
         p.resource = 0
+        p.deck = i
         p.number = j+1
+        random.shuffle(p.deck)
         players.append(p)
     state = GameState(players=players)
-    for i in decks:
-        state.deck.extend(i)
     state.current_phase = UpkeepPhase()
     state.current_phase.on_enter(state)
     return state

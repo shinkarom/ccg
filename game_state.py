@@ -34,10 +34,20 @@ class PlayerState:
     number: int = 0
 
     hand: List[int] = field(default_factory=list)
-    
+    deck: List[int] = field(default_factory=list)
+    graveyard: List[int] = field(default_factory=list)
     board: List[Optional['UnitState']] = field(
         default_factory=lambda: [None] * BOARD_SIZE
     )
+    
+    def draw_card(self):
+        
+        if not self.deck:
+            return
+        
+        # Draw the top card from the deck and add it to the hand.
+        card_id = self.deck.pop(0) # pop(0) takes from the "top" of the deck
+        self.hand.append(card_id)
 
 @dataclass
 class GameState:
@@ -45,8 +55,6 @@ class GameState:
     players: List[PlayerState]
     current_player_index: int = -1
     turn_number: int = 0
-    deck: List[int] = field(default_factory=list)
-    graveyard: List[int] = field(default_factory=list)
     current_phase: "Phase" = None
     
     def clone(self) -> 'GameState':
@@ -136,11 +144,12 @@ class GameState:
         #    This is the opponent's actual hand + their deck.
         opponent_hand_pool = []
         opponent_hand_pool.extend(p_opp.hand)
-        opponent_hand_pool.extend(self.deck)
+        opponent_hand_pool.extend(p_opp.deck)
         random.shuffle(opponent_hand_pool)
         
         # 4. Clear the opponent's hand and deck to re-deal.
         p_opp.hand = []
+        p_opp.deck = []
 
         # 5. Re-deal the opponent's hand from their shuffled pool.
         opponent_hand_size = len(self.players[1 - player_index].hand)
@@ -149,7 +158,7 @@ class GameState:
                 p_opp.hand.append(opponent_hand_pool.pop(0))
         
         # 6. The rest of the opponent's pool becomes their new shuffled deck.
-        self.deck = opponent_hand_pool
+        p_opp.deck = opponent_hand_pool
 
         return determined_state
         
@@ -161,16 +170,3 @@ class GameState:
         """
         return self.get_winner_index() != -1
         
-    def draw_card(self,player):
-        """
-        Draws one card, adding it to the hand.
-        If the deck is empty, shuffles the graveyard to form a new deck
-        before drawing. Does nothing if hand is full or no cards are available.
-        """
-        
-        if not self.deck:
-            return
-        
-        # Draw the top card from the deck and add it to the hand.
-        card_id = self.deck.pop(0) # pop(0) takes from the "top" of the deck
-        player.hand.append(card_id)
