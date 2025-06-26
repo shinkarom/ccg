@@ -26,3 +26,20 @@ def load_card_database(filepath: str):
 
 # We'll use simple, primitive types for all card properties.
 CARD_DB = load_card_database("card_database.json")
+
+def get_card_info_line(card_id):
+    info = CARD_DB[card_id]
+    cost = info["cost"]
+    typ = "u" if info["type"]=="UNIT" else "a"
+    stat = ""
+    if info["type"]=="UNIT":
+        att = info["attack"]
+        hel = info["health"]
+        stat = f"/{att}/{hel}"
+    info_line = f"{card_id}{typ}/{cost}{stat}"
+    return info_line
+    
+def get_card_line(card_id):
+    info = CARD_DB[card_id]
+    name = info["name"]
+    return f"{name} ({get_card_info_line(card_id)})"

@@ -3,7 +3,7 @@ import time
 
 # We need to import the type hints for our game objects
 from game_state import GameState, UnitCombatStatus
-from card_database import CARD_DB
+from card_database import CARD_DB, get_card_line
 from rich import print
 from rich.prompt import Prompt
 
@@ -68,8 +68,7 @@ class ConsoleUI:
         if show_hand:
             print("Hand:")        
             for i, card_id in enumerate(player_state.hand):
-                card = CARD_DB.get(card_id, {})
-                print(f"  [{i+1}] {card.get('name', 'Unknown')} (Cost: {card.get('cost', '?')})")        
+                print(f"  [{i+1}] {get_card_line(card_id)}")        
 
     def render_game_state(self, state: GameState, pov_player_index: int):
         """
