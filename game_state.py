@@ -29,7 +29,7 @@ class UnitState:
 @dataclass
 class PlayerState:
     """Represents all data for one player."""
-    health: int = 20
+    score: int = 0
     resource: int = 0
     number: int = 0
 
@@ -97,30 +97,19 @@ class GameState:
         return new_state
         
     def get_winner_index(self) -> int:
-        """
-        Determines if there is a winner and returns their index.
-        
-        Returns:
-            0: If Player 1 has won.
-            1: If Player 2 has won.
-            -1: If the game is still ongoing.
-            -2: If the game is a draw.
-        """
-        if self.turn_number >= 50:
-            return -2
+        if self.turn_number >= 150:
+            return -2 #draw
         p1 = self.players[0]
         p2 = self.players[1]
+        if p1.deck or p2.deck:
+            return -1
 
-        # Check for health-based win/loss conditions
-        p1_no_health = (p1.health <= 0)
-        p2_no_health = (p2.health <= 0)
-        #print(p1_no_health, p2_no_health)
-        if p1_no_health and p2_no_health:
-            return -2 # Draw condition
-        if p1_no_health:
-            return 1 # Player 2 wins
-        if p2_no_health:
-            return 0 # Player 1 wins
+        if p1.score > p2.score:
+            return 0
+        elif p2.score > p1.score:
+            return 1
+        else:
+            return -2
 
         # If no win/loss conditions are met, the game continues.
         return -1

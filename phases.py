@@ -161,17 +161,19 @@ class CombatPhase(Phase):
                 if not u1 and not u2:
                     continue
                 if not u1:
-                    player1.health -= u2.current_attack
+                    player2.score += 2
                     continue
                 if not u2:
-                    player2.health -= u1.current_attack
+                    player1.score += 2
                     continue
                 u1.current_health -= u2.current_attack
                 u2.current_health -= u1.current_attack
                 if u1.current_health <= 0:
+                    player2.score += 1
                     player1.graveyard.append(u1.card_id)
                     player1.board[i] = None
                 if u2.current_health <= 0:
+                    player1.score += 1
                     player2.graveyard.append(u2.card_id)
                     player2.board[i] = None
         

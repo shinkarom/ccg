@@ -44,7 +44,7 @@ class ConsoleUI:
         
         # We can also render the player's stats here for better grouping.
         # Note the hand size is public info, but the contents are not.
-        print(f"HP: {player_state.health:<3} | Resource: {player_state.resource:<2} | Hand: {len(player_state.hand):<2}")
+        print(f"Score: {player_state.score:<3} | Resource: {player_state.resource:<2} | Hand: {len(player_state.hand):<2}")
         
         print("Board:")
         for i, unit in enumerate(player_state.board):
