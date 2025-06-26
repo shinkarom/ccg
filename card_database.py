@@ -36,7 +36,7 @@ def get_card_info_line(card_id):
         att = info["attack"]
         hel = info["health"]
         stat = f"/{att}/{hel}"
-    info_line = f"{card_id}{typ}/{cost}{stat}"
+    info_line = f"{typ}{card_id}/{cost}{stat}"
     return info_line
     
 def get_card_line(card_id):

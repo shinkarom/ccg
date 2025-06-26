@@ -35,7 +35,7 @@ class ConsoleUI:
             else:
                 print("Invalid choice. Please enter 1, 2, or 3.")
 
-    def _render_player_board(self, player_state: 'PlayerState', label: str, show_hand: bool):
+    def _render_player_board(self, player_state: 'PlayerState', label: str):
         """
         Private helper method to render one player's side of the board.
         Encapsulates the duplicated logic.
@@ -65,17 +65,15 @@ class ConsoleUI:
                 # Print empty slot
                 print(f" [{i+1}] ")
               
-        if show_hand:
-            print("Hand:")        
-            for i, card_id in enumerate(player_state.hand):
-                print(f"  [{i+1}] {get_card_line(card_id)}")        
+        print("Hand:")        
+        for i, card_id in enumerate(player_state.hand):
+            print(f"  - {get_card_line(card_id)}")        
 
     def render_game_state(self, state: GameState, pov_player_index: int):
         """
         Prints the game state to the console using a helper method to stay DRY.
         """
         self.clear_screen()
-        show_opp_hand = False
         # --- Determine Perspective and Labels ---
         if pov_player_index != -1: # Player-centric view (PvP or PvE)
             p_pov = state.players[pov_player_index]
@@ -83,7 +81,6 @@ class ConsoleUI:
             pov_label = "YOUR"
             opp_label = "OPPONENT'S"
         else: # Neutral AI vs AI view
-            show_opp_hand = True
             p_pov = state.players[0]
             p_opp = state.players[1]
             pov_label = "PLAYER 1'S"
@@ -92,12 +89,12 @@ class ConsoleUI:
         print("="*50)
         
         # --- CALL THE HELPER METHOD for the opponent ---
-        self._render_player_board(p_opp, opp_label,show_opp_hand)
+        self._render_player_board(p_opp, opp_label)
         
         print("\n" + "-"*20 + " VS " + "-"*22 + "\n")
 
         # --- CALL THE HELPER METHOD for the point-of-view player ---
-        self._render_player_board(p_pov, pov_label,True)
+        self._render_player_board(p_pov, pov_label)
         
         print("-" * 50)
         

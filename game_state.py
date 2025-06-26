@@ -126,11 +126,6 @@ class GameState:
         return -1
         
     def determinize(self, player_index: int) -> 'GameState':
-        """
-        Creates a plausible, perfect-information state from the perspective of
-        the given player_index. This version correctly shuffles decks separately
-        to preserve deck counts.
-        """
         # 1. Start with a deep copy.
         determined_state = self.clone()
         
@@ -138,27 +133,8 @@ class GameState:
         p_self = determined_state.players[player_index]
         p_opp = determined_state.players[1 - player_index]
         
-        # --- Part A: Determine the Opponent's Hand ---
-
-        # 3. Pool the cards that could possibly be in the opponent's hand.
-        #    This is the opponent's actual hand + their deck.
-        opponent_hand_pool = []
-        opponent_hand_pool.extend(p_opp.hand)
-        opponent_hand_pool.extend(p_opp.deck)
-        random.shuffle(opponent_hand_pool)
-        
-        # 4. Clear the opponent's hand and deck to re-deal.
-        p_opp.hand = []
-        p_opp.deck = []
-
-        # 5. Re-deal the opponent's hand from their shuffled pool.
-        opponent_hand_size = len(self.players[1 - player_index].hand)
-        for _ in range(opponent_hand_size):
-            if opponent_hand_pool:
-                p_opp.hand.append(opponent_hand_pool.pop(0))
-        
-        # 6. The rest of the opponent's pool becomes their new shuffled deck.
-        p_opp.deck = opponent_hand_pool
+        random.shuffle(p_self.deck)
+        random.shuffle(p_opp.deck)
 
         return determined_state
         
