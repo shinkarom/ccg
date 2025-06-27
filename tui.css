@@ -1,18 +1,18 @@
-/* tui.css (Simplified for compatibility) */
-PlayerPane {
-    border: round white;
-    padding: 1;
-    width: 1fr; /* Make panes share horizontal space */
-}
+/* cli_style.css */
+/* A stylesheet for a command-line style interface. */
 
-#action-area {
-    border: round white;
-    padding: 1;
-    height: 10; /* Give it a fixed height */
-    align: center middle;
-}
-
+/* The main log should fill all available space. */
 #game-log {
-    border: round white;
-    height: 1fr; /* Make log take remaining vertical space */
+    /* The 1fr unit means "1 fraction", so it takes up all leftover space. */
+    height: 1fr; 
+    border: heavy $primary;
+    padding: 0 1;
 }
+
+/* The command input should be docked to the bottom. */
+#command-input {
+    dock: bottom;
+    height: 3; /* A height of 3 gives room for a border and one line of text. */
+    border: heavy $secondary;
+}
+

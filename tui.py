@@ -1,120 +1,149 @@
-# tui.py (Backwards-Compatible Version)
+# tui.py (Corrected Command-Line Style Version)
 
-from textual.app import App, ComposeResult
+from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.widgets import Header, Footer, Static, Button, RichLog
-# We will explicitly use these containers for layout
-from textual.containers import Vertical, Horizontal
+from textual.widgets import Header, Footer, RichLog, Input
+from textual.binding import Binding
+from textual import on
 
-# Import the controller and game state for type hinting
 from controller import GameController
-from game_state import PlayerState, UnitCombatStatus
 from card_database import CARD_DB, get_card_line
 
-class PlayerPane(Static):
-    """A widget to display a single player's side of the board. (No changes needed here)"""
-    def update_view(self, player_state: PlayerState, is_pov: bool):
-        pov_label = "(YOU)" if is_pov else "(OPPONENT)"
-        stats = f"Score: {player_state.score} | Res: {player_state.resource} | Hand: {len(player_state.hand)} | Deck: {len(player_state.deck)}"
-        board_lines = []
-        for i, unit in enumerate(player_state.board):
-            if unit:
-                card = CARD_DB.get(unit.card_id, {})
-                if unit.is_ready: status = "[green]+[/green]"
-                else: status = "[dim]-[/dim]"
-                board_lines.append(f"  [{i+1}] {status} {card.get('name')} ({unit.current_attack}/{unit.current_health})")
-        board_str = "\n".join(board_lines) if board_lines else "  (empty)"
-        hand_lines = []
-        if is_pov:
-            for card_id in player_state.hand:
-                hand_lines.append(f"  - {get_card_line(card_id)}")
-        hand_str = "\n".join(hand_lines) if hand_lines else "  (empty)"
-        self.update(f"[bold]{player_state.name.upper()} {pov_label}[/bold]\n{stats}\n\nBoard:\n{board_str}\n\nHand:\n{hand_str}")
-
-
 class GameScreen(Screen):
-    """The main screen where the game is played."""
+    """The main screen where the game is played, styled as a command-line interface."""
 
-    # We link the simplified CSS file
+    BINDINGS = [
+        Binding(key="ctrl+c", action="quit", description="Quit Game"),
+    ]
     CSS_PATH = "tui.css"
 
     def __init__(self, controller: GameController, **kwargs):
         self.controller = controller
+        # RENAMED to avoid conflict with the built-in 'log' property.
+        self.game_log: RichLog | None = None
+        self.command_input: Input | None = None
         super().__init__(**kwargs)
 
     def compose(self) -> ComposeResult:
-        """
-        Compose the layout using nested containers.
-        This is the backwards-compatible approach.
-        """
         yield Header()
-        
-        # A main vertical container for the log, board, and actions
-        with Vertical():
-            yield RichLog(id="game-log")
-            
-            # A horizontal container for the two player panes
-            with Horizontal(id="board-area"):
-                yield PlayerPane(id="opponent-pane")
-                yield PlayerPane(id="player-pane")
-
-            # A vertical container for the action buttons at the bottom
-            yield Vertical(id="action-area")
-        
+        yield RichLog(id="game-log", wrap=True, highlight=True)
+        yield Input(placeholder="Type a command and press Enter...", id="command-input")
         yield Footer()
 
-    # The on_mount, on_button_pressed, and update_display methods remain
-    # exactly the same. The logic inside them doesn't change, only the
-    # layout that they are modifying. I'm including them here for completeness.
-
     def on_mount(self) -> None:
-        """Called when the screen is first mounted. Initial setup."""
-        self.query_one("#game-log", RichLog).write("Game Started!")
+        # RENAMED: Cache the widgets with their new attribute names.
+        self.game_log = self.query_one(RichLog)
+        self.command_input = self.query_one(Input)
+
+        self.game_log.write("[bold cyan]Welcome to the CCG![/bold cyan]")
+        self.game_log.write("Type 'help' for a list of commands.")
         self.update_display()
+        
+        self.command_input.focus()
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handles all button clicks and triggers game logic."""
-        action_area = self.query_one("#action-area")
-        action_area.disabled = True # Prevent double-clicks
-
-        if hasattr(event.button, "move_data"):
-            move = event.button.move_data
-            self.query_one("#game-log", RichLog).write(f"Action: {move[0]}")
-            self.controller.process_action(move)
-            self.update_display()
-        elif event.button.id == "play-again-button":
-            self.controller.reset_game()
-            self.query_one("#game-log", RichLog).clear()
-            self.query_one("#game-log", RichLog).write("New Game Started!")
-            self.update_display()
-        elif event.button.id == "quit-button":
-            self.app.exit()
-
-    def update_display(self):
-        """This is the new 'render' function. It updates all widgets."""
+    def _generate_state_string(self) -> str:
+        # This method remains unchanged internally.
         state = self.controller.game_state
         pov_index = state.current_player_index
-        
-        self.query_one("#opponent-pane", PlayerPane).update_view(state.players[1 - pov_index], is_pov=False)
-        self.query_one("#player-pane", PlayerPane).update_view(state.players[pov_index], is_pov=True)
+        opponent = state.players[1 - pov_index]
+        player = state.players[pov_index]
+        lines = ["\n" + "="*50]
+        lines.append(f"[bold red]OPPONENT: {opponent.name}[/bold red]")
+        lines.append(f"  Score: {opponent.score} | Res: {opponent.resource} | Hand: {len(opponent.hand)} | Deck: {len(opponent.deck)}")
+        lines.append("  Board:")
+        if not opponent.board:
+            lines.append("    (empty)")
+        else:
+            for i, unit in enumerate(opponent.board):
+                if unit:
+                    card = CARD_DB.get(unit.card_id, {})
+                    lines.append(f"    [{i+1}] {card.get('name')} ({unit.current_attack}/{unit.current_health})")
+                else:
+                    lines.append(f"    [{i+1}] (empty)")
+        lines.append("-" * 50)
+        lines.append(f"[bold green]YOU: {player.name}[/bold green]")
+        lines.append(f"  Score: {player.score} | Res: {player.resource} | Hand: {len(player.hand)} | Deck: {len(player.deck)}")
+        lines.append("  Board:")
+        if not player.board:
+            lines.append("    (empty)")
+        else:
+            for i, unit in enumerate(player.board):
+                if unit:
+                    card = CARD_DB.get(unit.card_id, {})
+                    status = "[bold green]+[/bold green]" if unit.is_ready else "[dim]-[/dim]"
+                    lines.append(f"    [{i+1}] {status} {card.get('name')} ({unit.current_attack}/{unit.current_health})")
+                else:
+                    lines.append(f"    [{i+1}] (empty)")    
+        lines.append("  Hand:")
+        if not player.hand:
+            lines.append("    (empty)")
+        else:
+            for i, card_id in enumerate(player.hand):
+                lines.append(f"    [{i+1}] {get_card_line(card_id)}")
+        lines.append("="*50 + "\n")
+        return "\n".join(lines)
 
-        action_area = self.query_one("#action-area")
-        action_area.remove_children()
+    def update_display(self):
+        """This is the new 'render' function. It prints state to the log."""
+        state = self.controller.game_state
+        state_string = self._generate_state_string()
+        self.game_log.clear()
+        self.game_log.write(state_string) # RENAMED
 
         if state.is_terminal():
             winner_idx = state.get_winner()
             winner_name = state.players[winner_idx].name if winner_idx is not None else "DRAW"
-            action_area.mount(Static(f"[bold magenta]GAME OVER! Winner: {winner_name}[/bold magenta]"))
-            action_area.mount(Button("Play Again", variant="success", id="play-again-button"))
-            action_area.mount(Button("Quit", variant="error", id="quit-button"))
+            self.game_log.write(f"[bold magenta]GAME OVER! Winner: {winner_name}[/bold magenta]") # RENAMED
+            self.game_log.write("Type 'reset' to play again, or 'quit' to exit.") # RENAMED
+            self.command_input.placeholder = "Type 'reset' or 'quit'" # RENAMED
         else:
-            if state.current_player_index == pov_index:
+            is_my_turn = (state.current_player_index == state.current_player_index)
+            if is_my_turn:
+                self.game_log.write("[bold]Your turn. Available commands:[/bold]") # RENAMED
                 legal_moves = self.controller.get_legal_moves()
-                for move in legal_moves:
-                    button = Button(label=str(move[0]), variant="primary")
-                    button.move_data = move
-                    action_area.mount(button)
+                for i,move in enumerate(legal_moves):
+                    self.game_log.write(f"  [{i+1}] {move[0]}") # RENAMED
+                self.command_input.placeholder = "Your move..." # RENAMED
             else:
-                action_area.mount(Static("Waiting for opponent..."))
+                self.game_log.write("Waiting for opponent...") # RENAMED
+                self.command_input.placeholder = "Waiting..." # RENAMED
+
+    @on(Input.Submitted)
+    def handle_command(self, event: Input.Submitted) -> None:
+        """Handles commands entered into the Input widget."""
+        command = event.value.strip().lower()
+        self.command_input.clear() # RENAMED
         
-        action_area.disabled = False
+        if not command:
+            return
+
+        self.game_log.write(f"> {command}") # RENAMED
+
+        if command == "quit":
+            self.app.exit()
+            return
+        if command == "reset":
+            self.controller.reset_game()
+            self.game_log.clear() # RENAMED
+            self.game_log.write("[bold cyan]New Game Started![/bold cyan]") # RENAMED
+            self.update_display()
+            return
+        if command == "help":
+            self.game_log.write("--- Help ---\n'quit': Exit the game.\n'reset': Start a new game.\n'clear': Clear the log.\nTo play, type one of the available commands shown.") # RENAMED
+            return
+        if command == "clear":
+            self.game_log.clear() # RENAMED
+            return
+
+        found_move = None
+        if not self.controller.game_state.is_terminal():
+            for i,move in enumerate(self.controller.get_legal_moves()):
+                if command == str(i+1):
+                    found_move = move
+                    break
+        
+        if found_move:
+            self.controller.process_action(found_move)
+            self.update_display()
+        else:
+            self.game_log.write("[yellow]Invalid command. Type 'help' for options.[/yellow]") # RENAMED
