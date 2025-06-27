@@ -32,7 +32,7 @@ class PlayerState:
     score: int = 0
     resource: int = 0
     number: int = 0
-
+    name = "Player"
     hand: List[int] = field(default_factory=list)
     deck: List[int] = field(default_factory=list)
     graveyard: List[int] = field(default_factory=list)
@@ -134,4 +134,7 @@ class GameState:
         This is a convenience wrapper around get_winner_index().
         """
         return self.get_winner_index() != -1
+        
+    def eval_effects(self, eff,card_id):
+        print("processing effects")
         

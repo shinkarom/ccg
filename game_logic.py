@@ -7,7 +7,7 @@ from phases import UpkeepPhase
 import random
 from rich import print
 
-def init_game(decks,opts={}):
+def init_game(decks,opts={},player_names: list[str] = None):
     players = []
     for j, i in enumerate(decks):
         p = PlayerState()

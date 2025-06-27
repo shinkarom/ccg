@@ -1,214 +1,166 @@
-# main.py (Print-Based Console Version)
+# main.py (Full-Fledged Game Architecture, PvP Focus)
 
-import os
-import random
-import time
 from enum import Enum, auto
 from rich import print
+from rich.traceback import install
 
-# Our core game logic and AI
-from game_state import GameState, PlayerState
-from phases import UpkeepPhase
+# --- Core Game Logic and AI ---
+# Using the new analyzer, and assuming your other modules are in place.
+from game_state import GameState
 import game_logic
-from ccg_ai import CCG_AI
+from analyzer import MonteCarloAnalyzer
 from ui import ConsoleUI
 from deckgen import generate_quick_deck
 
-class GameMode(Enum):
-    PVP = '1'
-    PVE = '2'
-    AVA = '3'
-
-class PlayerType(Enum):
-    HUMAN = auto()
-    AI = auto()
-
-# --- Application State Management ---
+# --- Application State Management (Kept for future expansion) ---
 class AppState(Enum):
-    LOBBY = auto()
+    STARTING = auto()
     IN_GAME = auto()
     EXITING = auto()
 
-# --- Centralized Configuration (from previous step) ---
-CONTROLLER_AI_CONFIG = {"time_limit_ms": 500} # The AI that plays for itself
-ADVISOR_AI_CONFIG = {"time_limit_ms": 500}   # A faster AI for quick suggestions
-MODE_PLAYER_SETUP = {
-    GameMode.PVP: [PlayerType.HUMAN, PlayerType.HUMAN],
-    GameMode.PVE: [PlayerType.HUMAN, PlayerType.AI],
-    GameMode.AVA: [PlayerType.AI, PlayerType.AI],
-}
-
+# --- Player Abstraction (Simplified for now) ---
+# We no longer need PlayerType enum, as it's always HUMAN for now.
 class Player:
-    def __init__(self, player_type, ai_instance=None):
-        self.type = player_type
-        self.ai = ai_instance
-
-    def is_human(self):
-        return self.type == PlayerType.HUMAN
+    """A simple container for player information."""
+    def __init__(self, name: str):
+        self.name = name
+        # In the future, this could hold player-specific stats, deck choices, etc.
 
 # --------------------------------------------------------------------------
-# NEW CLASS 1: GameRunner - Encapsulates a single game session
+# GameRunner - Encapsulates a single game session (Largely Unchanged)
 # --------------------------------------------------------------------------
 class GameRunner:
     """
     Manages the execution of a single game from start to finish.
-    It is configured by the GameApplication and doesn't know about lobbies.
+    It is configured by the GameApplication.
     """
-    def __init__(self, ui, players, pov_provider):
+    def __init__(self, ui: ConsoleUI, players: list[Player], analyzer: MonteCarloAnalyzer):
         self.ui = ui
         self.players = players
-        self.get_pov_for_render = pov_provider
+        self.analyzer = analyzer
+        self.game_state = self._setup_game()
+
+    def _setup_game(self) -> GameState:
+        """Creates the initial game state for the session."""
+        print("Setting up a new PvP game...")
+        # For now, generate two identical decks. This can be expanded to use config.
+        deck1 = generate_quick_deck(40)
+        deck2 = generate_quick_deck(40)
+        
+        player_names = [p.name for p in self.players]
+        initial_state = game_logic.init_game(decks=[deck1, deck2], player_names=player_names)
+        print("[green]Game setup complete![/green]\n")
+        return initial_state
 
     def run_game(self):
-        """Contains the main game loop."""
-        d = generate_quick_deck(40)
-        game_state = game_logic.init_game([d.copy(), d.copy()])
+        """Contains the main game loop, returning when the game is over."""
         previous_player_idx = -1
 
-        while True:
-            # 1. Check for Game Over
-            winner_index = game_state.get_winner_index()
-            if winner_index != -1:
-                pov_index_at_end = self.get_pov_for_render(previous_player_idx)
-                self.ui.render_game_state(game_state, pov_index_at_end)
-                self.ui.display_game_over(winner_index)
-                return  # Game is over, return control to the application
+        while not self.game_state.is_terminal():
+            current_player_idx = self.game_state.current_player_index
+            current_player_name = self.players[current_player_idx].name
 
-            current_player_idx = game_state.current_player_index
-            
-            # 2. Universal "Press Enter" prompt
             if current_player_idx != previous_player_idx:
-                self.ui.prompt_for_priority(current_player_idx + 1)
+                self.ui.prompt_for_turn(current_player_name)
             previous_player_idx = current_player_idx
             
-            # 3. Render from the correct POV
-            pov_to_render = self.get_pov_for_render(current_player_idx)
-            self.ui.render_game_state(game_state, pov_to_render)
+            # Render from the current player's perspective
+            self.ui.render_game_state(self.game_state, pov_index=current_player_idx)
             
-            current_player = self.players[current_player_idx]
-            action = None
+            legal_moves = self.game_state.get_legal_moves()
+            if not legal_moves:
+                continue # Assume game logic handles auto-pass
 
-            r = game_state.get_legal_moves()
-            if len(r) == 1:
-                print(f"Automaticaly performing {r[0]}")
-                game_state = game_state.process_action(r[0])
-                continue
-
-            if current_player.is_human():
-                # --- Human Player's Turn Sequence ---
-                # a. Get and display the advisor's suggestion automatically.
-                print("Advisor is analyzing the board...")
-                advisor_ai = current_player.ai
-                suggested_action, rollouts = advisor_ai.find_best_move(game_state)
-                self.ui.display_ai_suggestion(suggested_action, rollouts)
-                
-                # b. NOW, prompt the human for their actual move.
-                action = self.ui.get_human_move(game_state)
-
-            else: # AI Player's Turn Sequence
-                print(f"Player {current_player_idx + 1} (AI) is thinking...")
-                action, rollouts = current_player.ai.find_best_move(game_state)
-                self.ui.display_ai_move(action, rollouts)
-            
-            # 5. Apply Action
-            if action:
-                if action == ("QUIT_GAME",):
-                    print("Returning to lobby...")
-                    return # Game is quit, return control
-                game_state = game_state.process_action(action)
+            if len(legal_moves) == 1:
+                action = legal_moves[0]
+                print(f"Only one legal move. Automatically performing: [cyan]{action}[/cyan]")
             else:
-                print("Error: No action was chosen or available. Exiting game.")
-                return
+                # --- Human Player's Turn Sequence ---
+                # a. Get and display the advisor's analysis.
+                print("\n[yellow]Running advisor analysis...[/yellow]")
+                analysis_report = self.analyzer.analyze_moves(self.game_state)
+                sims = analysis_report[1].get("sims_run",-1)
+                msecs = analysis_report[1].get("time_elapsed_ms",-1)
+                secs = msecs / 1000.0 if msecs != -1 else -1
+                print(f"[green]{sims} simulations in {secs:.0f} seconds[/green]")
+                # b. Prompt the human for their actual move, using the analysis.
+                action = self.ui.get_human_choice(legal_moves, analysis_report)
 
+            # --- Apply Action ---
+            if action is None: # User chose to quit from the UI prompt
+                print("Returning to main menu...")
+                return # Game is quit, return control to GameApplication
+            
+            self.game_state = self.game_state.process_action(action)
+            print("-" * 50)
+
+        # --- Game Over ---
+        # The loop has ended, so the game is over.
+        self.ui.render_game_state(self.game_state, pov_index=0) # Show final state
+        self.ui.display_game_over(self.game_state)
 
 # --------------------------------------------------------------------------
-# NEW CLASS 2: GameApplication - The main application controller
+# GameApplication - The main application controller (Simplified Lobby)
 # --------------------------------------------------------------------------
 class GameApplication:
     """
-    Controls the overall application flow, including the lobby and game sessions.
+    Controls the overall application flow. For now, it bypasses the lobby
+    and starts a PvP game directly.
     """
     def __init__(self):
         self.ui = ConsoleUI()
-        self.state = AppState.LOBBY
-        self.game_settings = {} # Will hold the configuration from the lobby
+        self.state = AppState.STARTING
+        # The analyzer is owned by the application, passed to a game runner.
+        self.analyzer = MonteCarloAnalyzer()
 
     def run(self):
         """The main application loop."""
+        self.ui.display_welcome("CCG Project")
+
         while self.state != AppState.EXITING:
-            if self.state == AppState.LOBBY:
-                self.run_lobby()
-            elif self.state == AppState.IN_GAME:
-                self.start_game()
-                # After the game, we can decide where to go.
-                # For now, we go back to the lobby.
-                self.state = AppState.LOBBY 
-
-    def run_lobby(self):
-        """
-        This is where you'd handle creating a new game, joining one, etc.
-        For now, it just configures and starts one game.
-        """
-        self.ui.display_welcome()
-        
-        # In a real lobby, this would be a loop where you select options
-        # and see other players. The "get_game_mode" is the first step.
-        mode_input = self.ui.get_game_mode()
-        if not mode_input: # User might want to quit from the lobby
-            self.state = AppState.EXITING
-            return
-
-        try:
-            mode = GameMode(mode_input)
-        except ValueError:
-            print(f"Invalid mode '{mode_input}'. Please try again.")
-            return # Stay in the lobby state
-
-        players = []
-        # --- Use the lobby selection to configure the next game ---
-        player_types = MODE_PLAYER_SETUP[mode]
-        for p_type in player_types:
-            # Choose the correct AI configuration based on the player type
-            config = CONTROLLER_AI_CONFIG if p_type == PlayerType.AI else ADVISOR_AI_CONFIG
-            ai_instance = CCG_AI(config)
-            players.append(Player(p_type, ai_instance))
-
-        # Determine the POV rendering strategy based on the mode
-        human_player_index = next((i for i, p in enumerate(players) if p.is_human()), -1)
-        if mode == GameMode.PVE:
-            pov_provider = lambda current_idx: human_player_index
-        if mode == GameMode.AVA:
-            pov_provider = lambda current_idx: -1
-        else:
-            pov_provider = lambda current_idx: current_idx
+            if self.state == AppState.STARTING:
+                # Instead of a lobby, we immediately transition to a game.
+                self.state = AppState.IN_GAME
             
-        # Store the complete configuration and change the application state
-        self.game_settings = {
-            "players": players,
-            "pov_provider": pov_provider
+            elif self.state == AppState.IN_GAME:
+                self.start_pvp_game()
+                # After the game, ask the user if they want to play again.
+                if self.ui.ask_play_again():
+                    self.state = AppState.IN_GAME # Loop back to start another game
+                else:
+                    self.state = AppState.EXITING # Exit the application
+    
+    def start_pvp_game(self):
+        """Configures and runs a single PvP game session."""
+        
+        # 1. Configure Players for PvP
+        # This is where we hardcode the PvP setup.
+        # In the future, a lobby would gather this info.
+        players = [
+            Player(name="Player 1"),
+            Player(name="Player 2")
+        ]
+
+        # 2. Configure the Analyzer (optional)
+        # You could prompt the user for these settings in a real lobby.
+        analyzer_options = {
+            "simulation_limit_per_move": 100,
+            "time_limit_ms": 1000,
         }
-        self.state = AppState.IN_GAME
-        
-    def start_game(self):
-        """Creates and runs a game session using the current settings."""
-        if not self.game_settings:
-            print("Error: Cannot start game, no settings configured.")
-            self.state = AppState.LOBBY
-            return
-        
-        # Create a GameRunner with the settings chosen in the lobby
-        runner = GameRunner(
-            self.ui,
-            self.game_settings["players"],
-            self.game_settings["pov_provider"]
-        )
-        runner.run_game() # This will block until the game is over
+        self.analyzer.set_options(analyzer_options)
+
+        # 3. Create and run the game session
+        runner = GameRunner(self.ui, players, self.analyzer)
+        runner.run_game() # This will block until the game is over or quit.
         
 
 if __name__ == "__main__":
-    from rich.traceback import install
+    # Enable rich tracebacks for easier debugging
     install(show_locals=False)
-    # The entry point is now extremely simple!
+    
+    # The entry point remains extremely simple and clean
     app = GameApplication()
     app.run()
-    print("Thanks for playing!")
+    
+    print("\nThanks for playing!")
+

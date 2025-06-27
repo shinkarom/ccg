@@ -35,8 +35,10 @@ def get_card_info_line(card_id):
     if info["type"]=="UNIT":
         att = info["attack"]
         hel = info["health"]
-        stat = f"/{att}/{hel}"
-    info_line = f"{typ}{card_id}/{cost}{stat}"
+        kw = len(info.get("keywords", set()))
+        stat = f"/{att}att/{hel}hel/{kw}kw"
+    eff = len(info.get("effects", []))
+    info_line = f"{card_id}{typ}/{cost}cost/{eff}eff{stat}"
     return info_line
     
 def get_card_line(card_id):

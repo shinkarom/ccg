@@ -107,7 +107,9 @@ class MainPhase(Phase):
             card_id = player.hand.pop(hand_idx)
             card_info = CARD_DB[card_id]
             player.resource -= card_info['cost']
-            
+            eff = card_info.get("effects", [])
+            if eff:
+                state.eval_effects(eff, card_id)
             unit = UnitState(
                 card_id=card_id,
                 current_attack=card_info['attack'],
@@ -143,39 +145,41 @@ class MainPhase(Phase):
             player.graveyard.append(card_id)
         
         elif action_type == "PASS":
+            pass
+        
+        if state.turn_number %2 == 0:
             return CombatPhase()
-
-        return CombatPhase()
+        else:
+            return UpkeepPhase()
 
 class CombatPhase(Phase):
     def get_name(self):
         return "Combat"
         
     def on_enter(self, state):
-        if state.turn_number %2 == 0:
-            player1 = state.players[0]
-            player2 = state.players[1]
-            for i in range(BOARD_SIZE):
-                u1 = player1.board[i]
-                u2 = player2.board[i]
-                if not u1 and not u2:
-                    continue
-                if not u1:
-                    player2.score += 2
-                    continue
-                if not u2:
-                    player1.score += 2
-                    continue
-                u1.current_health -= u2.current_attack
-                u2.current_health -= u1.current_attack
-                if u1.current_health <= 0:
-                    player2.score += 1
-                    player1.graveyard.append(u1.card_id)
-                    player1.board[i] = None
-                if u2.current_health <= 0:
-                    player1.score += 1
-                    player2.graveyard.append(u2.card_id)
-                    player2.board[i] = None
+        player1 = state.players[0]
+        player2 = state.players[1]
+        for i in range(BOARD_SIZE):
+            u1 = player1.board[i]
+            u2 = player2.board[i]
+            if not u1 and not u2:
+                continue
+            if not u1:
+                player2.score += 2
+                continue
+            if not u2:
+                player1.score += 2
+                continue
+            u1.current_health -= u2.current_attack
+            u2.current_health -= u1.current_attack
+            if u1.current_health <= 0:
+                player2.score += 1
+                player1.graveyard.append(u1.card_id)
+                player1.board[i] = None
+            if u2.current_health <= 0:
+                player1.score += 1
+                player2.graveyard.append(u2.card_id)
+                player2.board[i] = None
         
         state.current_phase = UpkeepPhase()
         state.current_phase.on_enter(state)

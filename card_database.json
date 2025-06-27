@@ -57,7 +57,9 @@
         "name": "Direct Hit",
         "type": "ACTION",
         "cost": 2,
-        "effect": {},
+        "effects": [
+			{"type": "DAMAGE","target":"OPP", "value": 3}
+		],
         "text": "Deal 3 damage."
     }
 }
