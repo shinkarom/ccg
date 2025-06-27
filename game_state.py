@@ -134,7 +134,16 @@ class GameState:
         This is a convenience wrapper around get_winner_index().
         """
         return self.get_winner_index() != -1
-        
+    
+    def get_forecast_snapshot(self,player_num):
+        player = self.players[player_num]
+        opponent = self.players[1-player_num]
+        x = {}
+        x["is_terminal"] = self.is_terminal()
+        x["score"] = player.score
+        x["opp_score"] = opponent.score
+        return x
+    
     def eval_effects(self, eff,card_id):
         print("processing effects")
         

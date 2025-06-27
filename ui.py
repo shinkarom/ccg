@@ -34,7 +34,7 @@ class ConsoleUI:
         pov_label = "(YOU)" if is_pov else "(OPPONENT)"
         print(f"--- {player_state.name.upper()}'S SIDE {pov_label} ---")
         
-        print(f"Score: {player_state.score:<3} | Hand: {len(player_state.hand):<2} | Deck: {len(player_state.deck):<2} | Discard: {len(player_state.graveyard):<2}")
+        print(f"Score: {player_state.score:<3} | Resource: {player_state.resource:<3} | Hand: {len(player_state.hand):<2} | Deck: {len(player_state.deck):<2} | Discard: {len(player_state.graveyard):<2}")
         
         print("Board:")
         if not any(player_state.board):
@@ -72,46 +72,25 @@ class ConsoleUI:
         self._render_player_board(p_pov, is_pov=True)
         
         print("-" * 50)
-        turn_status = f"Turn {state.turn_number} | Phase: {state.current_phase.get_name()} | Player {state.current_player_index + 1}'s Turn"
+        turn_status = f"Turn {state.turn_number} | Phase: {state.current_phase.get_name()} | Priority: {state.players[state.current_player_index].name}"
         print(f"[bold yellow]{turn_status}[/bold yellow]\n")
 
     def prompt_for_turn(self, player_name: str):
         """A simple prompt that waits for the player who has control."""
         Prompt.ask(f"\n--- Priority passes to [bold cyan]{player_name}[/bold cyan]. Press Enter to continue... ---")
 
-    def get_human_choice(self, moves: List[Any], report: Dict[str, Any]) -> Optional[Any]:
+    def get_human_choice(self, moves: List[Any]) -> Optional[Any]:
         """
         Displays a sorted list of moves with analysis, and gets the user's choice.
         This is the primary interaction point for a human player.
         """
         print("\n--- CHOOSE YOUR ACTION ---")
-
-        # --- 1. Sort the moves based on the analysis report ---
-        # The lambda function looks up the win rate for each move's string representation.
-        # .get(str(move), {}).get('win_rate', -1.0) is a safe way to handle moves not in the report.
-        if report:
-            sorted_moves = sorted(
-                moves,
-                key=lambda move: report[0].get(str(move), {}).get('win_rate', -1.0),
-                reverse=True  # Highest win rate first
-            )
-        else:
-            sorted_moves = moves # If no report, use the original order
-
-        # --- 2. Display the sorted and formatted list of options ---
+        
+        sorted_moves = moves # If no report, use the original order
+        
         for i, move in enumerate(sorted_moves):
-            move_str = str(move)
-            stats = report[0].get(move_str)
-            
-            # This is where the formatting happens, exactly as requested.
-            if stats and stats['sims'] > 0:
-                win_rate_str = f"{stats['win_rate']:.1%}"
-                win_contrib_str = f"{stats['win_contribution']:.1%}"
-                # The final formatted line:
-                print(f"[[bold]{i+1}[/bold]] {move_str} [dim](WR: {win_rate_str}, WC: {win_contrib_str})[/dim]")
-            else:
-                # If no stats are available for this move, just print the move.
-                print(f"[[bold]{i+1}[/bold]] {move_str}")
+            move_str = str(move[0])
+            print(f"[[bold]{i+1}[/bold]] {str(move[0])}")
 
         # --- 3. Get valid input from the user ---
         while True:
@@ -130,7 +109,6 @@ class ConsoleUI:
                     print(f"[red]Invalid number. Please enter a value between 1 and {len(sorted_moves)}.[/red]")
             except ValueError:
                 print("[red]Invalid input. Please enter a number.[/red]")
-
 
     def ask_play_again(self) -> bool:
         """Asks the user if they want to play another game."""

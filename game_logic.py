@@ -14,6 +14,7 @@ def init_game(decks,opts={},player_names: list[str] = None):
         p.resource = 0
         p.deck = i
         p.number = j+1
+        p.name = player_names[j]
         random.shuffle(p.deck)
         players.append(p)
     state = GameState(players=players)

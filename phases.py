@@ -81,12 +81,15 @@ class MainPhase(Phase):
                     # KEY CHANGE: Generate a move for EACH empty slot
                     for slot_idx, slot in enumerate(player.board):
                         if slot is None:
-                            # The move now includes the target slot index
-                            legal_moves.append(('PLAY_UNIT', hand_idx, slot_idx))
+                            name = card_info["name"]
+                            desc = f"Play [green]{name}[/green] into slot {slot_idx+1}"
+                            legal_moves.append((desc,'PLAY_UNIT', hand_idx, slot_idx))
                 elif card_info['type'] == 'ACTION':
-                    legal_moves.append(('PLAY_ACTION', hand_idx))
+                    name = card_info["name"]
+                    desc = f"Play [green]{name}[/green]"
+                    legal_moves.append((desc,'PLAY_ACTION', hand_idx))
              
-        legal_moves.append(('PASS', ))
+        legal_moves.append(("Pass",'PASS', ))
         
         return legal_moves
 
@@ -96,13 +99,13 @@ class MainPhase(Phase):
         """
         # --- 1. Apply the specific effect of the chosen action ---
         
-        action_type = action[0]
+        action_type = action[1]
         player = state.players[state.current_player_index]
         opponent = state.players[1-state.current_player_index]
         if action_type == 'PLAY_UNIT':
             
             # KEY CHANGE: Unpack the target slot index from the action
-            hand_idx, slot_idx = action[1], action[2]
+            hand_idx, slot_idx = action[2], action[3]
             
             card_id = player.hand.pop(hand_idx)
             card_info = CARD_DB[card_id]
@@ -120,7 +123,7 @@ class MainPhase(Phase):
             # KEY CHANGE: Place the unit in the specified slot
             player.board[slot_idx] = unit
         elif action_type == 'PLAY_ACTION':
-            ind = action[1]
+            ind = action[2]
             
             # --- VALIDATION PHASE ---
             # 1. Validate hand index.

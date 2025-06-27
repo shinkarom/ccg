@@ -8,7 +8,6 @@ from rich.traceback import install
 # Using the new analyzer, and assuming your other modules are in place.
 from game_state import GameState
 import game_logic
-from analyzer import MonteCarloAnalyzer
 from ui import ConsoleUI
 from deckgen import generate_quick_deck
 
@@ -34,10 +33,9 @@ class GameRunner:
     Manages the execution of a single game from start to finish.
     It is configured by the GameApplication.
     """
-    def __init__(self, ui: ConsoleUI, players: list[Player], analyzer: MonteCarloAnalyzer):
+    def __init__(self, ui: ConsoleUI, players: list[Player]):
         self.ui = ui
         self.players = players
-        self.analyzer = analyzer
         self.game_state = self._setup_game()
 
     def _setup_game(self) -> GameState:
@@ -73,18 +71,9 @@ class GameRunner:
 
             if len(legal_moves) == 1:
                 action = legal_moves[0]
-                print(f"Only one legal move. Automatically performing: [cyan]{action}[/cyan]")
+                print(f"Only one legal move. Automatically performing: [cyan]{action[0]}[/cyan]")
             else:
-                # --- Human Player's Turn Sequence ---
-                # a. Get and display the advisor's analysis.
-                print("\n[yellow]Running advisor analysis...[/yellow]")
-                analysis_report = self.analyzer.analyze_moves(self.game_state)
-                sims = analysis_report[1].get("sims_run",-1)
-                msecs = analysis_report[1].get("time_elapsed_ms",-1)
-                secs = msecs / 1000.0 if msecs != -1 else -1
-                print(f"[green]{sims} simulations in {secs:.0f} seconds[/green]")
-                # b. Prompt the human for their actual move, using the analysis.
-                action = self.ui.get_human_choice(legal_moves, analysis_report)
+                action = self.ui.get_human_choice(legal_moves)
 
             # --- Apply Action ---
             if action is None: # User chose to quit from the UI prompt
@@ -110,8 +99,6 @@ class GameApplication:
     def __init__(self):
         self.ui = ConsoleUI()
         self.state = AppState.STARTING
-        # The analyzer is owned by the application, passed to a game runner.
-        self.analyzer = MonteCarloAnalyzer()
 
     def run(self):
         """The main application loop."""
@@ -141,16 +128,8 @@ class GameApplication:
             Player(name="Player 2")
         ]
 
-        # 2. Configure the Analyzer (optional)
-        # You could prompt the user for these settings in a real lobby.
-        analyzer_options = {
-            "simulation_limit_per_move": 100,
-            "time_limit_ms": 1000,
-        }
-        self.analyzer.set_options(analyzer_options)
-
         # 3. Create and run the game session
-        runner = GameRunner(self.ui, players, self.analyzer)
+        runner = GameRunner(self.ui, players)
         runner.run_game() # This will block until the game is over or quit.
         
 
