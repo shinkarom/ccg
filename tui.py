@@ -26,7 +26,7 @@ class GameScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield RichLog(id="game-log", wrap=True, highlight=True)
+        yield RichLog(id="game-log", wrap=True, markup=True)
         yield Input(placeholder="Type a command and press Enter...", id="command-input")
         yield Footer()
 
@@ -97,16 +97,11 @@ class GameScreen(Screen):
             self.game_log.write("Type 'reset' to play again, or 'quit' to exit.") # RENAMED
             self.command_input.placeholder = "Type 'reset' or 'quit'" # RENAMED
         else:
-            is_my_turn = (state.current_player_index == state.current_player_index)
-            if is_my_turn:
-                self.game_log.write("[bold]Your turn. Available commands:[/bold]") # RENAMED
-                legal_moves = self.controller.get_legal_moves()
-                for i,move in enumerate(legal_moves):
-                    self.game_log.write(f"  [{i+1}] {move[0]}") # RENAMED
-                self.command_input.placeholder = "Your move..." # RENAMED
-            else:
-                self.game_log.write("Waiting for opponent...") # RENAMED
-                self.command_input.placeholder = "Waiting..." # RENAMED
+            self.game_log.write("[bold]Your turn. Available commands:[/bold]") # RENAMED
+            legal_moves = self.controller.get_legal_moves()
+            for i,move in enumerate(legal_moves):
+                self.game_log.write(f"  [{i+1}] {move[0]}") # RENAMED
+            self.command_input.placeholder = "Your move..." # RENAMED
 
     @on(Input.Submitted)
     def handle_command(self, event: Input.Submitted) -> None:
