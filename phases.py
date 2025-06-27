@@ -71,20 +71,25 @@ class MainPhase(Phase):
     
     def get_legal_moves(self, state) -> list:
         # This is your familiar "Develop or Deploy" logic
+        playable = set()
         legal_moves = []
         player = state.players[state.current_player_index]
         opponent = state.players[1-state.current_player_index]
         for hand_idx, card_id in enumerate(player.hand):
+            if card_id in playable:
+                continue
             card_info = CARD_DB[card_id]
             if player.resource >= card_info['cost']:
                 if card_info['type'] == 'UNIT':
                     # KEY CHANGE: Generate a move for EACH empty slot
                     for slot_idx, slot in enumerate(player.board):
                         if slot is None:
+                            playable.add(card_id)
                             name = card_info["name"]
                             desc = f"Play [green]{name}[/green] into slot {slot_idx+1}"
                             legal_moves.append((desc,'PLAY_UNIT', hand_idx, slot_idx))
                 elif card_info['type'] == 'ACTION':
+                    playable.add(card_id)
                     name = card_info["name"]
                     desc = f"Play [green]{name}[/green]"
                     legal_moves.append((desc,'PLAY_ACTION', hand_idx))
@@ -135,7 +140,7 @@ class MainPhase(Phase):
             card_info = CARD_DB.get(card_id) 
             if not card_info:
                 raise KeyError(f"MCTS Desync: Card ID '{card_id}' not found in CARD_DB.")
-
+            
             # 2. Validate resource cost.
             if player.resource < card_info['cost']:
                 raise ValueError(f"MCTS Desync: Tried to play card {card_id} with cost {card_info['cost']}, but player only has {player.resource} resources.")
@@ -146,6 +151,10 @@ class MainPhase(Phase):
             player.resource -= card_info['cost']
             
             player.graveyard.append(card_id)
+        
+            eff = card_info.get("effects", [])
+            if eff:
+                state.eval_effects(eff, card_id)
         
         elif action_type == "PASS":
             pass

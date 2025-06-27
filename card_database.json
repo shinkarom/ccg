@@ -46,9 +46,8 @@
         "name": "Energy Surge",
         "type": "ACTION",
         "cost": 1,
-        "effect": [
-            "DRAW_CARDS",
-            1
+        "effects": [
+            {"type": "DRAW_CARDS","target":"SELF", "value": 1}
         ],
         "text": "Draw a card."
     },

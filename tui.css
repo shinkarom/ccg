@@ -1,0 +1,18 @@
+/* tui.css (Simplified for compatibility) */
+PlayerPane {
+    border: round white;
+    padding: 1;
+    width: 1fr; /* Make panes share horizontal space */
+}
+
+#action-area {
+    border: round white;
+    padding: 1;
+    height: 10; /* Give it a fixed height */
+    align: center middle;
+}
+
+#game-log {
+    border: round white;
+    height: 1fr; /* Make log take remaining vertical space */
+}
