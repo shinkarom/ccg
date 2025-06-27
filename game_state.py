@@ -135,6 +135,12 @@ class GameState:
         """
         return self.get_winner_index() != -1
     
+    def get_current_player(self):
+        return self.players[self.current_player_index]
+    
+    def get_opponent(self):
+        return self.players[1-self.current_player_index]
+    
     def eval_effects(self, eff,card_id):
         pass
         

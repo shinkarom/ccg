@@ -1,144 +1,214 @@
-# tui.py (Corrected Command-Line Style Version)
-
-from textual.app import ComposeResult
-from textual.screen import Screen
-from textual.widgets import Header, Footer, RichLog, Input
-from textual.binding import Binding
-from textual import on
+import os
+import time
+from rich.console import Console, Group
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+from rich.rule import Rule
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 
 from controller import GameController
 from card_database import CARD_DB, get_card_line
 
-class GameScreen(Screen):
-    """The main screen where the game is played, styled as a command-line interface."""
+def clear_screen():
+    """Clears the terminal screen."""
+    os.system('cls' if os.name == 'nt' else 'clear')
 
-    BINDINGS = [
-        Binding(key="ctrl+c", action="quit", description="Quit Game"),
-    ]
-    CSS_PATH = "tui.css"
+class GameUI:
+    """A comfortable REPL-style UI for the CCG using Rich and Prompt Toolkit."""
 
-    def __init__(self, controller: GameController, **kwargs):
+    def __init__(self, controller: GameController):
         self.controller = controller
-        # RENAMED to avoid conflict with the built-in 'log' property.
-        self.game_log: RichLog | None = None
-        self.command_input: Input | None = None
-        super().__init__(**kwargs)
+        self.console = Console()
+        self.session = PromptSession(auto_suggest=AutoSuggestFromHistory())
 
-    def compose(self) -> ComposeResult:
-        yield Header()
-        yield RichLog(id="game-log", wrap=True, markup=True)
-        yield Input(placeholder="Type a command and press Enter...", id="command-input")
-        yield Footer()
+    def run(self):
+        """The main game loop."""
+        while True:
+            clear_screen()
+            
+            ## MODIFIED: Fetch legal moves before displaying state and getting input
+            legal_moves = []
+            if not self.controller.game_state.is_terminal():
+                legal_moves = self.controller.get_legal_moves()
 
-    def on_mount(self) -> None:
-        # RENAMED: Cache the widgets with their new attribute names.
-        self.game_log = self.query_one(RichLog)
-        self.command_input = self.query_one(Input)
+            self._display_game_state(legal_moves)
 
-        self.game_log.write("[bold cyan]Welcome to the CCG![/bold cyan]")
-        self.game_log.write("Type 'help' for a list of commands.")
-        self.update_display()
-        
-        self.command_input.focus()
-
-    def _generate_state_string(self) -> str:
-        # This method remains unchanged internally.
-        state = self.controller.game_state
-        pov_index = state.current_player_index
-        opponent = state.players[1 - pov_index]
-        player = state.players[pov_index]
-        lines = ["\n" + "="*50]
-        lines.append(f"[bold red]OPPONENT: {opponent.name}[/bold red]")
-        lines.append(f"  Score: {opponent.score} | Res: {opponent.resource} | Hand: {len(opponent.hand)} | Deck: {len(opponent.deck)}")
-        lines.append("  Board:")
-        if not opponent.board:
-            lines.append("    (empty)")
-        else:
-            for i, unit in enumerate(opponent.board):
-                if unit:
-                    card = CARD_DB.get(unit.card_id, {})
-                    lines.append(f"    [{i+1}] {card.get('name')} ({unit.current_attack}/{unit.current_health})")
-                else:
-                    lines.append(f"    [{i+1}] (empty)")
-        lines.append("-" * 50)
-        lines.append(f"[bold green]YOU: {player.name}[/bold green]")
-        lines.append(f"  Score: {player.score} | Res: {player.resource} | Hand: {len(player.hand)} | Deck: {len(player.deck)}")
-        lines.append("  Board:")
-        if not player.board:
-            lines.append("    (empty)")
-        else:
-            for i, unit in enumerate(player.board):
-                if unit:
-                    card = CARD_DB.get(unit.card_id, {})
-                    status = "[bold green]+[/bold green]" if unit.is_ready else "[dim]-[/dim]"
-                    lines.append(f"    [{i+1}] {status} {card.get('name')} ({unit.current_attack}/{unit.current_health})")
-                else:
-                    lines.append(f"    [{i+1}] (empty)")    
-        lines.append("  Hand:")
-        if not player.hand:
-            lines.append("    (empty)")
-        else:
-            for i, card_id in enumerate(player.hand):
-                lines.append(f"    [{i+1}] {get_card_line(card_id)}")
-        lines.append("="*50 + "\n")
-        return "\n".join(lines)
-
-    def update_display(self):
-        """This is the new 'render' function. It prints state to the log."""
-        state = self.controller.game_state
-        state_string = self._generate_state_string()
-        self.game_log.clear()
-        self.game_log.write(state_string) # RENAMED
-
-        if state.is_terminal():
-            winner_idx = state.get_winner()
-            winner_name = state.players[winner_idx].name if winner_idx is not None else "DRAW"
-            self.game_log.write(f"[bold magenta]GAME OVER! Winner: {winner_name}[/bold magenta]") # RENAMED
-            self.game_log.write("Type 'reset' to play again, or 'quit' to exit.") # RENAMED
-            self.command_input.placeholder = "Type 'reset' or 'quit'" # RENAMED
-        else:
-            self.game_log.write("[bold]Your turn. Available commands:[/bold]") # RENAMED
-            legal_moves = self.controller.get_legal_moves()
-            for i,move in enumerate(legal_moves):
-                self.game_log.write(f"  [{i+1}] {move[0]}") # RENAMED
-            self.command_input.placeholder = "Your move..." # RENAMED
-
-    @on(Input.Submitted)
-    def handle_command(self, event: Input.Submitted) -> None:
-        """Handles commands entered into the Input widget."""
-        command = event.value.strip().lower()
-        self.command_input.clear() # RENAMED
-        
-        if not command:
-            return
-
-        self.game_log.write(f"> {command}") # RENAMED
-
-        if command == "quit":
-            self.app.exit()
-            return
-        if command == "reset":
-            self.controller.reset_game()
-            self.game_log.clear() # RENAMED
-            self.game_log.write("[bold cyan]New Game Started![/bold cyan]") # RENAMED
-            self.update_display()
-            return
-        if command == "help":
-            self.game_log.write("--- Help ---\n'quit': Exit the game.\n'reset': Start a new game.\n'clear': Clear the log.\nTo play, type one of the available commands shown.") # RENAMED
-            return
-        if command == "clear":
-            self.game_log.clear() # RENAMED
-            return
-
-        found_move = None
-        if not self.controller.game_state.is_terminal():
-            for i,move in enumerate(self.controller.get_legal_moves()):
-                if command == str(i+1):
-                    found_move = move
+            if self.controller.game_state.is_terminal():
+                self._handle_game_over()
+                if self.controller.game_state.is_terminal():
                     break
+                else:
+                    continue
+            
+            ## MODIFIED: The completer now only suggests meta-commands.
+            meta_commands = ["help", "quit", "reset"]
+            completer = WordCompleter(meta_commands, ignore_case=True)
+
+            try:
+                command_str = self.session.prompt(
+                    "> ",
+                    completer=completer,
+                    complete_while_typing=True
+                )
+                self._handle_command(command_str.strip().lower(), legal_moves)
+            except (KeyboardInterrupt, EOFError):
+                self.console.print("\n[bold yellow]Quitting game.[/bold yellow]")
+                break
+
+    ## MODIFIED: Now takes legal_moves as an argument to display them.
+    def _display_game_state(self, legal_moves: list):
+        """Renders the entire game state, including available actions."""
+        state = self.controller.game_state
+        player = state.get_current_player()
+        opponent = state.get_opponent()
+
+        # --- Opponent, Player, and Hand Panels (Unchanged) ---
+        opponent_panel = self._create_opponent_panel(opponent)
+        player_panel = self._create_player_panel(player)
+        hand_panel = self._create_hand_panel(player.hand)
         
-        if found_move:
-            self.controller.process_action(found_move)
-            self.update_display()
-        else:
-            self.game_log.write("[yellow]Invalid command. Type 'help' for options.[/yellow]") # RENAMED
+        self.console.print(Rule(f"[bold]Turn {state.turn_number} - {player.name}'s Move[/bold]"))
+        self.console.print(opponent_panel)
+        self.console.print(player_panel)
+        self.console.print(hand_panel)
+        
+        ## NEW: Create and print a dedicated table for actions.
+        actions_table = self._create_actions_table(legal_moves)
+        self.console.print(actions_table)
+
+    ## --- Panel and Table Creation Helpers ---
+
+    def _create_opponent_panel(self, opponent) -> Panel:
+        opponent_table = self._create_board_table(opponent.board, is_opponent=True)
+        opponent_stats = (
+            f"Score: [bold]{opponent.score}[/] | "
+            f"Resource: [bold]{opponent.resource}[/] | "
+            f"Hand: [bold]{len(opponent.hand)}[/] | "
+            f"Deck: [bold]{len(opponent.deck)}[/]"
+        )
+        return Panel(
+            Group(Text.from_markup(opponent_stats), opponent_table),
+            title=f"[red]Opponent: {opponent.name}[/red]", border_style="red"
+        )
+
+    def _create_player_panel(self, player) -> Panel:
+        player_board_table = self._create_board_table(player.board)
+        player_stats = (
+            f"Score: [bold]{player.score}[/] | "
+            f"Resource: [bold]{player.resource}[/] | "
+            f"Hand: [bold]{len(player.hand)}[/] | "
+            f"Deck: [bold]{len(player.deck)}[/]"
+        )
+        return Panel(
+            Group(Text.from_markup(player_stats), player_board_table),
+            title=f"[green]You: {player.name}[/green]", border_style="green"
+        )
+
+    def _create_hand_panel(self, hand: list) -> Panel:
+        hand_table = self._create_hand_table(hand)
+        return Panel(
+            hand_table, title="[bold cyan]Your Hand[/bold cyan]", border_style="cyan"
+        )
+    
+    ## NEW HELPER METHOD: Creates the table listing available moves.
+    def _create_actions_table(self, legal_moves: list) -> Table:
+        """Creates a Rich Table for the list of available actions."""
+        table = Table(title="[bold]Available Actions[/bold]", show_header=True, header_style="bold magenta", box=None)
+        table.add_column("Index", justify="center", width=5)
+        table.add_column("Action", no_wrap=True)
+
+        for i, move in enumerate(legal_moves, 1):
+            table.add_row(f"[{i}]", move[0])
+        
+        if not legal_moves:
+            table.add_row(Text("(No actions available)", style="dim", justify="center"))
+            
+        return table
+        
+    def _create_board_table(self, board: list, is_opponent=False) -> Table:
+        # This method is unchanged
+        table = Table(show_header=True, header_style="bold magenta", box=None)
+        table.add_column("Slot", justify="center", width=4)
+        if not is_opponent:
+            table.add_column("Status", width=7)
+        table.add_column("Card Name", style="cyan", no_wrap=True)
+        table.add_column("ATK/HP", justify="center")
+
+        for i, unit in enumerate(board):
+            if unit:
+                card = CARD_DB.get(unit.card_id, {})
+                stats = f"{unit.current_attack}/{unit.current_health}"
+                if is_opponent:
+                    table.add_row(f"[{i+1}]", card.get('name'), stats)
+                else:
+                    status = Text("Ready", style="green") if unit.is_ready else Text("Used", style="dim")
+                    table.add_row(f"[{i+1}]", status, card.get('name'), stats)
+            else:
+                table.add_row(f"[{i+1}]", Text("(empty)", style="dim"))
+        return table
+
+    def _create_hand_table(self, hand: list) -> Table:
+        # This method is unchanged
+        table = Table(show_header=True, header_style="bold magenta", box=None)
+        table.add_column("Index", justify="center", width=5)
+        table.add_column("Card", style="cyan", no_wrap=True)
+        
+        for i, card_id in enumerate(hand):
+            table.add_row(f"[{i+1}]", get_card_line(card_id))
+        
+        if not hand:
+            table.add_row(Text("(empty)", style="dim", justify="center"))
+            
+        return table
+
+    ## MODIFIED: Major refactor to handle indexed input.
+    def _handle_command(self, command_str: str, legal_moves: list):
+        """Parses a command and executes it."""
+        if command_str == "quit":
+            raise EOFError
+        elif command_str == "reset":
+            self.console.print("[bold yellow]Restarting game...[/bold yellow]")
+            self.controller.reset_game()
+            time.sleep(1)
+            return
+        elif command_str == "help":
+            self.console.print("[bold]Help:[/bold]\n- Type the number of the action you want to perform.\n- `quit`: Exit the game.\n- `reset`: Start a new game.")
+            input("Press Enter to continue...")
+            return
+
+        # Try to process the command as a move index
+        try:
+            move_idx = int(command_str)
+            # Check if the number is in the valid range of moves
+            if 1 <= move_idx <= len(legal_moves):
+                # Retrieve the move (adjusting for zero-based index)
+                found_move = legal_moves[move_idx - 1]
+                self.controller.process_action(found_move)
+            else:
+                # Number was valid, but out of range
+                self.console.print(f"[bold red]Error: '{move_idx}' is not a valid move index.[/bold red]")
+                time.sleep(1.5)
+        except ValueError:
+            # The input was not a number
+            self.console.print(f"[bold red]Invalid command: '{command_str}'. Please enter a number.[/bold red]")
+            time.sleep(1.5)
+
+    def _handle_game_over(self):
+        # This method is unchanged
+        winner_idx = self.controller.game_state.get_winner()
+        winner_name = self.controller.game_state.players[winner_idx].name if winner_idx is not None else "DRAW"
+        self.console.print(Rule(f"[bold magenta]GAME OVER! Winner: {winner_name}[/bold magenta]"))
+        
+        completer = WordCompleter(["reset", "quit"], ignore_case=True)
+        command = self.session.prompt("> Type 'reset' or 'quit': ", completer=completer)
+        
+        if command.lower() == 'reset':
+            self.controller.reset_game()
+
+if __name__ == "__main__":
+    game_controller = GameController("Arin", "Zanthar")
+    ui = GameUI(game_controller)
+    ui.run()
