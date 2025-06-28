@@ -36,9 +36,7 @@ class PlayerState:
     hand: List[int] = field(default_factory=list)
     deck: List[int] = field(default_factory=list)
     graveyard: List[int] = field(default_factory=list)
-    board: List[Optional['UnitState']] = field(
-        default_factory=lambda: [None] * BOARD_SIZE
-    )
+    board: List['UnitState'] = field(default_factory=list)
     
     def draw_card(self):
         

@@ -75,19 +75,18 @@ class MainPhase(Phase):
         legal_moves = []
         player = state.players[state.current_player_index]
         opponent = state.players[1-state.current_player_index]
+        first_slot = -1
         for hand_idx, card_id in enumerate(player.hand):
             if card_id in playable:
                 continue
             card_info = CARD_DB[card_id]
             if player.resource >= card_info['cost']:
-                if card_info['type'] == 'UNIT':
+                if (card_info['type'] == 'UNIT'):
                     # KEY CHANGE: Generate a move for EACH empty slot
-                    for slot_idx, slot in enumerate(player.board):
-                        if slot is None:
-                            playable.add(card_id)
-                            name = card_info["name"]
-                            desc = f"Play [green]{name}[/green] into slot {slot_idx+1}"
-                            legal_moves.append((desc,'PLAY_UNIT', hand_idx, slot_idx))
+                    playable.add(card_id)
+                    name = card_info["name"]
+                    desc = f"Play [green]{name}[/green]"
+                    legal_moves.append((desc,'PLAY_UNIT', hand_idx))
                 elif card_info['type'] == 'ACTION':
                     playable.add(card_id)
                     name = card_info["name"]
@@ -110,8 +109,7 @@ class MainPhase(Phase):
         if action_type == 'PLAY_UNIT':
             
             # KEY CHANGE: Unpack the target slot index from the action
-            hand_idx, slot_idx = action[2], action[3]
-            
+            hand_idx = action[2]
             card_id = player.hand.pop(hand_idx)
             card_info = CARD_DB[card_id]
             player.resource -= card_info['cost']
@@ -126,7 +124,7 @@ class MainPhase(Phase):
                 keywords = card_info["keywords"]
             )
             # KEY CHANGE: Place the unit in the specified slot
-            player.board[slot_idx] = unit
+            player.board.append(unit)
         elif action_type == 'PLAY_ACTION':
             ind = action[2]
             
@@ -168,31 +166,66 @@ class CombatPhase(Phase):
     def get_name(self):
         return "Combat"
         
-    def on_enter(self, state):
+    def on_enter(self, state: 'GameState'):
+        """
+        Resolves combat between players' boards.
+        This version assumes player.board is a dynamic list of UnitState objects.
+        """
         player1 = state.players[0]
         player2 = state.players[1]
-        for i in range(BOARD_SIZE):
+        
+        # --- 1. DAMAGE CALCULATION ---
+        # Determine the length of the "front line" for combat.
+        # It's the smaller of the two board sizes.
+        combat_len = min(len(player1.board), len(player2.board))
+
+        for i in range(combat_len):
             u1 = player1.board[i]
             u2 = player2.board[i]
-            if not u1 and not u2:
-                continue
-            if not u1:
-                player2.score += 2
-                continue
-            if not u2:
-                player1.score += 2
-                continue
+            
+            # Units deal damage to each other simultaneously.
             u1.current_health -= u2.current_attack
             u2.current_health -= u1.current_attack
-            if u1.current_health <= 0:
-                player2.score += 1
-                player1.graveyard.append(u1.card_id)
-                player1.board[i] = None
-            if u2.current_health <= 0:
-                player1.score += 1
-                player2.graveyard.append(u2.card_id)
-                player2.board[i] = None
         
+        # Unopposed units deal damage directly to the opponent's score.
+        # Check if player 1 has more units than player 2.
+        if len(player1.board) > combat_len:
+            for i in range(combat_len, len(player1.board)):
+                player1.score += 2 # Or use a different value for direct damage
+        
+        # Check if player 2 has more units than player 1.
+        if len(player2.board) > combat_len:
+            for i in range(combat_len, len(player2.board)):
+                player2.score += 2
+
+
+        # --- 2. CLEANUP & SCORE ---
+        # We build new lists containing only the survivors.
+
+        survivors_p1 = []
+        for unit in player1.board:
+            if unit.current_health > 0:
+                survivors_p1.append(unit)
+            else:
+                # The unit was defeated. Add to graveyard and score for opponent.
+                player1.graveyard.append(unit.card_id)
+                player2.score += 1
+        
+        survivors_p2 = []
+        for unit in player2.board:
+            if unit.current_health > 0:
+                survivors_p2.append(unit)
+            else:
+                # The unit was defeated. Add to graveyard and score for opponent.
+                player2.graveyard.append(unit.card_id)
+                player1.score += 1
+
+        # --- 3. UPDATE BOARD STATE ---
+        # Replace the old boards with the new lists of survivors.
+        player1.board = survivors_p1
+        player2.board = survivors_p2
+
+        # --- 4. TRANSITION TO NEXT PHASE ---
         state.current_phase = UpkeepPhase()
         state.current_phase.on_enter(state)
         

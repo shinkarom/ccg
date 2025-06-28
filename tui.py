@@ -131,7 +131,6 @@ class GameUI:
     def _create_board_table(self, board: list, is_opponent=False) -> Table:
         # This method is unchanged
         table = Table(show_header=True, header_style="bold magenta", box=None)
-        table.add_column("Slot", justify="center", width=4)
         if not is_opponent:
             table.add_column("Status", width=7)
         table.add_column("Card Name", style="cyan", no_wrap=True)
@@ -142,10 +141,10 @@ class GameUI:
                 card = CARD_DB.get(unit.card_id, {})
                 stats = f"{unit.current_attack}/{unit.current_health}"
                 if is_opponent:
-                    table.add_row(f"[{i+1}]", card.get('name'), stats)
+                    table.add_row(card.get('name'), stats)
                 else:
                     status = Text("Ready", style="green") if unit.is_ready else Text("Used", style="dim")
-                    table.add_row(f"[{i+1}]", status, card.get('name'), stats)
+                    table.add_row(status, card.get('name'), stats)
             else:
                 table.add_row(f"[{i+1}]", Text("(empty)", style="dim"))
         return table
@@ -207,8 +206,3 @@ class GameUI:
         
         if command.lower() == 'reset':
             self.controller.reset_game()
-
-if __name__ == "__main__":
-    game_controller = GameController("Arin", "Zanthar")
-    ui = GameUI(game_controller)
-    ui.run()
