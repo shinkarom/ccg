@@ -1,47 +1,76 @@
-# card_database.py
-from rich import print
+# card_database.py (Rewritten for the Deckbuilder)
+
 import json
-"""
-This file holds the master definitions for all cards in the game.
-The key is an integer Card ID.
-The value is a dictionary holding the card's static properties.
+from rich.text import Text
 
-Effects are stored as data tuples, e.g., ('EFFECT_NAME', value), which the
-game engine will know how to interpret. This is crucial for an MCTS AI,
-as it doesn't need to execute arbitrary code during simulations.
+"""
+This file loads the master JSON database for all cards in the game.
+It also provides helper functions for displaying card information in the UI.
 """
 
-def load_card_database(filepath: str):
-    """
-    Loads card definitions from a JSON file.
-    """
-    card_database = {}
-    with open(filepath, 'r') as f:
-        data = json.load(f)
+def load_card_database(filepath: str) -> dict:
+    """Loads card definitions from a JSON file."""
+    try:
+        with open(filepath, 'r') as f:
+            # Use the json module to load the data
+            card_database = json.load(f)
+        return card_database
+    except FileNotFoundError:
+        print(f"[bold red]Error: Card database file not found at '{filepath}'.[/bold red]")
+        print("[bold red]Please ensure 'card_database.json' is in the same directory.[/bold red]")
+        exit() # Exit the program if cards can't be loaded
+    except json.JSONDecodeError:
+        print(f"[bold red]Error: Could not parse '{filepath}'. Please check for JSON syntax errors.[/bold red]")
+        exit()
 
-    for card_id, card_data in data.items():
-        card_database[card_id] = card_data
-        
-    return card_database
-
-# We'll use simple, primitive types for all card properties.
+# --- Global Card Database ---
+# Load the database once when the module is imported.
 CARD_DB = load_card_database("card_database.json")
 
-def get_card_info_line(card_id):
-    info = CARD_DB[card_id]
-    cost = info["cost"]
-    typ = "u" if info["type"]=="UNIT" else "a"
-    stat = ""
-    if info["type"]=="UNIT":
-        att = info["attack"]
-        hel = info["health"]
-        kw = len(info.get("keywords", set()))
-        stat = f"/{att}att/{hel}hel/{kw}kw"
-    eff = len(info.get("effects", []))
-    info_line = f"{card_id}{typ}/{cost}cost/{eff}eff{stat}"
-    return info_line
+
+# --- UI Helper Functions ---
+
+def get_card_line(card_id: str, show_cost: bool = True) -> Text:
+    """
+    Generates a single, rich-formatted line representing a card.
+    Perfect for lists in the UI (hand, supply, etc.).
     
-def get_card_line(card_id):
+    Example Output: [Artisanal Beans] (Cost: 3) - +$2. Synergy: +1 Buzz.
+    """
+    if card_id not in CARD_DB:
+        return Text(f"Unknown Card ID: {card_id}", style="bold red")
+
     info = CARD_DB[card_id]
-    name = info["name"]
-    return f"{name} ({get_card_info_line(card_id)})"
+    name = info.get("name", "Unnamed Card")
+    cost = info.get("cost", 0)
+    text = info.get("text", "")
+    tag = info.get("tag", "None")
+
+    # Start building the Rich Text object
+    card_text = Text()
+    
+    # Add name with style based on tag
+    tag_style_map = {
+        "INGREDIENT": "green",
+        "EQUIPMENT": "cyan",
+        "STAFF": "magenta",
+        "None": "white"
+    }
+    card_text.append(f"[{name}]", style=tag_style_map.get(tag, "white"))
+
+    # Add cost
+    if show_cost:
+        card_text.append(f" (Cost: {cost})", style="yellow")
+    
+    # Add descriptive text
+    if text:
+        card_text.append(f" - {text}", style="dim")
+
+    return card_text
+
+# You can keep this simple function if you just want the name
+def get_card_name(card_id: str) -> str:
+    """A simple helper to get just the card's name."""
+    if card_id not in CARD_DB:
+        return "Unknown Card"
+    return CARD_DB[card_id].get("name", "Unnamed Card")

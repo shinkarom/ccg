@@ -1,144 +1,145 @@
-# game_state.py
+# game_state.py (Completely Rewritten for the Single-Player Deckbuilder)
 
 import copy
 import random
 from dataclasses import dataclass, field
-from typing import List, Optional, Set, Dict, Tuple
-from typing import TYPE_CHECKING
-from enum import Enum, auto
+from typing import List, TYPE_CHECKING
+from card_database import CARD_DB
+
 if TYPE_CHECKING:
-    from phases import Phase, UpkeepPhase
-from shared import *
-from rich import print
+    from phases import Phase
 
-class UnitCombatStatus(Enum):
-    IDLE = auto()      # The default state, not involved in current combat
-    ATTACKING = auto() # The unit declared as an attacker this action
-    BLOCKING = auto()  # The unit chosen to block this action
-
-@dataclass
-class UnitState:
-    """Represents a single unit on the board."""
-    card_id: int
-    current_attack: int
-    current_health: int
-    is_ready: bool
-    combat_status: UnitCombatStatus = UnitCombatStatus.IDLE
-    keywords: Set[str] = field(default_factory=set)
-
-@dataclass
-class PlayerState:
-    """Represents all data for one player."""
-    score: int = 0
-    resource: int = 0
-    number: int = 0
-    name = "Player"
-    hand: List[int] = field(default_factory=list)
-    deck: List[int] = field(default_factory=list)
-    graveyard: List[int] = field(default_factory=list)
-    board: List['UnitState'] = field(default_factory=list)
-    
-    def draw_card(self):
-        
-        if not self.deck:
-            return
-        
-        # Draw the top card from the deck and add it to the hand.
-        card_id = self.deck.pop(0) # pop(0) takes from the "top" of the deck
-        self.hand.append(card_id)
+# --- The Unified Game State ---
 
 @dataclass
 class GameState:
-    """The complete, self-contained state of a game at any point in time."""
-    players: List[PlayerState]
-    current_player_index: int = -1
-    turn_number: int = 0
-    current_phase: "Phase" = None
+    """
+    A theme-agnostic, self-contained state for a single-player deckbuilder.
+    This class holds all data for the game and knows how to resolve card effects.
+    """
     
+    # --- Permanent State ---
+    victory_points: int = 0
+    turn_number: int = 0
+    
+    # --- Resource Pools (Reset each turn) ---
+    resource_primary: int = 0
+    resource_secondary: int = 0
+    
+    # --- Card Piles ---
+    deck: List[str] = field(default_factory=list)
+    hand: List[str] = field(default_factory=list)
+    discard_pile: List[str] = field(default_factory=list)
+    play_area: List[str] = field(default_factory=list)
+    
+    # --- Supply (The Market) ---
+    supply: List[str] = field(default_factory=list)
+    supply_deck: List[str] = field(default_factory=list)
+    staples: List[str] = field(default_factory=list)
+
+    # --- Game Flow ---
+    current_phase: "Phase" = None
+
     def clone(self) -> 'GameState':
-        """
-        Creates a deep copy of the game state.
-        This is the most critical function for an MCTS AI, allowing it to
-        safely explore future moves without altering the real game state.
-        """
+        """Creates a deep copy of the game state for safe simulation."""
         return copy.deepcopy(self)
+
+    # --- Core Gameplay Methods ---
+
+    def draw_card(self):
+        """Draws a single card, reshuffling the discard pile if the deck is empty."""
+        if not self.deck:
+            if not self.discard_pile:
+                return  # Cannot draw, both piles are empty
+            
+            # Reshuffle discard pile into deck
+            self.deck = self.discard_pile
+            self.discard_pile = []
+            random.shuffle(self.deck)
         
+        if self.deck:
+            card_id = self.deck.pop(0)
+            self.hand.append(card_id)
+
+    def eval_effects(self, card_id: str):
+        """
+        Resolves the effects of a played card. This is the heart of the engine.
+        """
+        card_info = CARD_DB.get(card_id)
+        if not card_info:
+            print(f"Warning: Card ID '{card_id}' not found in database.")
+            return
+
+        # --- Resolve Primary Ability ---
+        primary_effects = card_info.get("primary_ability", [])
+        for effect in primary_effects:
+            self._apply_effect(effect)
+
+        # --- Check and Resolve Tag Bonus (e.g., Synergy/Ally) ---
+        tag_bonus = card_info.get("tag_bonus")
+        if tag_bonus:
+            played_card_tag = card_info.get("tag")
+            # Check other cards in the play area, excluding the one just played
+            for other_card_id in self.play_area[:-1]:
+                other_card_info = CARD_DB.get(other_card_id, {})
+                if other_card_info.get("tag") == played_card_tag:
+                    # Found a match, apply the bonus effects and stop looking
+                    for effect in tag_bonus.get("effects", []):
+                        self._apply_effect(effect)
+                    break # Only need one match to trigger the bonus
+
+    def _apply_effect(self, effect: dict):
+        """A helper method to apply a single, atomic effect dictionary."""
+        effect_type = effect.get("type")
+        value = effect.get("value", 0)
+
+        if effect_type == "ADD_RESOURCE_PRIMARY":
+            self.resource_primary += value
+        elif effect_type == "ADD_RESOURCE_SECONDARY":
+            self.resource_secondary += value
+        elif effect_type == "ADD_VICTORY_POINTS":
+            self.victory_points += value
+        elif effect_type == "DRAW_CARDS":
+            for _ in range(value):
+                self.draw_card()
+        # Add more effect types here as needed (e.g., TRASH_CARD, etc.)
+        else:
+            print(f"Warning: Unknown effect type '{effect_type}'")
+
+    # --- Game Flow & State Management ---
+
     def get_legal_moves(self) -> list:
-        """
-        Gets legal moves by delegating to the current phase.
-        The main loop will call this.
-        """
+        """Delegates getting legal moves to the current phase."""
+        if self.is_terminal():
+            return []
         return self.current_phase.get_legal_moves(self)    
         
     def process_action(self, action: tuple) -> 'GameState':
         """
-        Processes an action by delegating to the current phase and returns
-        the new, resulting game state. This is the new primary interface
-        for advancing the game.
+        Processes an action by delegating to the current phase.
+        This is the main way the game state advances.
         """
-        # 1. Clone the current state to work on a new copy.
         new_state = self.clone()
-
-        # 2. Ask the current phase to process the action on this new state.
-        #    This will modify the `new_state` and return the next phase object.
         next_phase = new_state.current_phase.process_action(new_state, action)
-
-        # 3. Assign the new phase to our new state object.
         new_state.current_phase = next_phase
         
-        # 4. If the new phase has an on_enter method, call it.
-        #    This is how automatic phases like Upkeep will trigger.
+        # If the new phase has an on_enter method, call it.
+        # This is how CleanupPhase automatically runs its logic.
         if hasattr(next_phase, 'on_enter'):
             next_phase.on_enter(new_state)
 
-        # 5. Return the fully updated new state.
         return new_state
-        
-    def get_winner_index(self) -> int:
-        if self.turn_number >= 150:
-            return -2 #draw
-        p1 = self.players[0]
-        p2 = self.players[1]
-        if p1.deck or p2.deck:
-            return -1
 
-        if p1.score > p2.score:
-            return 0
-        elif p2.score > p1.score:
-            return 1
-        else:
-            return -2
-
-        # If no win/loss conditions are met, the game continues.
-        return -1
-        
-    def determinize(self, player_index: int) -> 'GameState':
-        # 1. Start with a deep copy.
-        determined_state = self.clone()
-        
-        # 2. Get references to the players in the new state.
-        p_self = determined_state.players[player_index]
-        p_opp = determined_state.players[1 - player_index]
-        
-        random.shuffle(p_self.deck)
-        random.shuffle(p_opp.deck)
-
-        return determined_state
-        
     def is_terminal(self) -> bool:
-        """
-        Checks if the game has reached a terminal state (i.e., a winner has been decided).
-        
-        This is a convenience wrapper around get_winner_index().
-        """
-        return self.get_winner_index() != -1
-    
-    def get_current_player(self):
-        return self.players[self.current_player_index]
-    
-    def get_opponent(self):
-        return self.players[1-self.current_player_index]
-    
-    def eval_effects(self, eff,card_id):
-        pass
-        
+        """Checks if the game has reached a terminal state."""
+        # Example win condition: reaching 50 VP
+        if self.victory_points >= 50:
+            return True
+        # Example loss condition: supply deck is empty and supply row is empty
+        if not self.supply_deck and not self.supply:
+            return True
+        # Example turn limit
+        if self.turn_number > 40:
+             return True
+             
+        return False

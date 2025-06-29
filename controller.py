@@ -15,9 +15,7 @@ class GameController:
 
     def _setup_game(self) -> GameState:
         """Creates the initial game state for a session. (Unchanged logic)"""
-        deck1 = generate_quick_deck(40)
-        deck2 = generate_quick_deck(40)
-        return game_logic.init_game(decks=[deck1, deck2], player_names=self.player_names)
+        return game_logic.init_game()
 
     def get_legal_moves(self) -> list:
         """A simple pass-through to the game state for the UI to use."""

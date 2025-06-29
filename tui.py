@@ -1,23 +1,28 @@
+# ui.py (Rewritten for the Single-Player Deckbuilder)
+
 import os
 import time
-from rich.console import Console, Group
+from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich.rule import Rule
+from rich.layout import Layout
+from rich.live import Live
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 
-from controller import GameController
-from card_database import CARD_DB, get_card_line
+# Assuming controller.py and card_database.py are in the same directory
+from controller import GameController 
+from card_database import get_card_line
 
 def clear_screen():
     """Clears the terminal screen."""
     os.system('cls' if os.name == 'nt' else 'clear')
 
 class GameUI:
-    """A comfortable REPL-style UI for the CCG using Rich and Prompt Toolkit."""
+    """A comfortable REPL-style UI for the single-player deckbuilder."""
 
     def __init__(self, controller: GameController):
         self.controller = controller
@@ -29,141 +34,128 @@ class GameUI:
         while True:
             clear_screen()
             
-            ## MODIFIED: Fetch legal moves before displaying state and getting input
-            legal_moves = []
-            if not self.controller.game_state.is_terminal():
-                legal_moves = self.controller.get_legal_moves()
+            # Fetch legal moves before displaying state and getting input
+            legal_moves = self.controller.get_legal_moves()
 
             self._display_game_state(legal_moves)
 
             if self.controller.game_state.is_terminal():
                 self._handle_game_over()
-                if self.controller.game_state.is_terminal():
-                    break
-                else:
-                    continue
+                # The controller handles the reset, so we just continue the loop
+                continue
             
-            ## MODIFIED: The completer now only suggests meta-commands.
+            # The completer now only suggests meta-commands
             meta_commands = ["help", "quit", "reset"]
             completer = WordCompleter(meta_commands, ignore_case=True)
 
             try:
-                command_str = self.session.prompt(
-                    "> ",
-                    completer=completer,
-                    complete_while_typing=True
-                )
+                command_str = self.session.prompt("> ", completer=completer)
                 self._handle_command(command_str.strip().lower(), legal_moves)
             except (KeyboardInterrupt, EOFError):
                 self.console.print("\n[bold yellow]Quitting game.[/bold yellow]")
                 break
 
-    ## MODIFIED: Now takes legal_moves as an argument to display them.
     def _display_game_state(self, legal_moves: list):
-        """Renders the entire game state, including available actions."""
+        """Renders the entire game state using a Rich Layout."""
         state = self.controller.game_state
-        player = state.get_current_player()
-        opponent = state.get_opponent()
 
-        # --- Opponent, Player, and Hand Panels (Unchanged) ---
-        opponent_panel = self._create_opponent_panel(opponent)
-        player_panel = self._create_player_panel(player)
-        hand_panel = self._create_hand_panel(player.hand)
+        # --- Create all UI panels ---
+        status_panel = self._create_status_panel(state)
+        supply_panel = self._create_supply_panel(state.supply)
+        play_area_panel = self._create_play_area_panel(state.play_area)
+        hand_panel = self._create_hand_panel(state.hand)
+        actions_panel = self._create_actions_panel(legal_moves)
+
+        # --- Assemble layout ---
+        # Top section: status and market
+        top_layout = Layout(name="top")
+        top_layout.split_row(status_panel, supply_panel)
         
-        self.console.print(Rule(f"[bold]Turn {state.turn_number} - {player.name}'s Move[/bold]"))
-        self.console.print(opponent_panel)
-        self.console.print(player_panel)
-        self.console.print(hand_panel)
+        # Middle section: play area and hand
+        middle_layout = Layout(name="middle")
+        middle_layout.split_row(play_area_panel, hand_panel)
+
+        # Main layout
+        main_layout = Layout()
+        main_layout.split_column(
+            Layout(top_layout, name="header", size=7),
+            Layout(middle_layout, name="body"),
+            Layout(actions_panel, name="footer", size=12)
+        )
         
-        ## NEW: Create and print a dedicated table for actions.
-        actions_table = self._create_actions_table(legal_moves)
-        self.console.print(actions_table)
+        self.console.print(Rule(f"[bold]Coffee Shop Magnate - Day {state.turn_number}[/bold]"))
+        self.console.print(main_layout)
 
-    ## --- Panel and Table Creation Helpers ---
+    # --- Panel Creation Helpers ---
 
-    def _create_opponent_panel(self, opponent) -> Panel:
-        opponent_table = self._create_board_table(opponent.board, is_opponent=True)
-        opponent_stats = (
-            f"Score: [bold]{opponent.score}[/] | "
-            f"Resource: [bold]{opponent.resource}[/] | "
-            f"Hand: [bold]{len(opponent.hand)}[/] | "
-            f"Deck: [bold]{len(opponent.deck)}[/]"
-        )
+    def _create_status_panel(self, state) -> Panel:
+        """Panel showing player resources and deck counts."""
+        # Build a Text object programmatically instead of parsing a string
+        status = Text()
+        status.append("Cash ($):", style="bold yellow")
+        status.append(f" {state.resource_primary}\n", style="bold")
+        
+        status.append("Buzz:", style="bold cyan")
+        status.append(f" {state.resource_secondary}\n", style="bold")
+        
+        status.append("Prestige (PP):", style="bold magenta")
+        status.append(f" {state.victory_points}\n\n", style="bold")
+        
+        status.append(f"Deck: {len(state.deck)} | Discard: {len(state.discard_pile)}", style="dim")
+
         return Panel(
-            Group(Text.from_markup(opponent_stats), opponent_table),
-            title=f"[red]Opponent: {opponent.name}[/red]", border_style="red"
+            status,
+            title="[green]Business Status[/green]",
+            border_style="green"
         )
 
-    def _create_player_panel(self, player) -> Panel:
-        player_board_table = self._create_board_table(player.board)
-        player_stats = (
-            f"Score: [bold]{player.score}[/] | "
-            f"Resource: [bold]{player.resource}[/] | "
-            f"Hand: [bold]{len(player.hand)}[/] | "
-            f"Deck: [bold]{len(player.deck)}[/]"
-        )
-        return Panel(
-            Group(Text.from_markup(player_stats), player_board_table),
-            title=f"[green]You: {player.name}[/green]", border_style="green"
-        )
+    def _create_supply_panel(self, supply: list) -> Panel:
+        """Panel showing the cards available for purchase."""
+        table = Table(show_header=False, box=None)
+        for card_id in supply:
+            table.add_row(get_card_line(card_id))
+        
+        return Panel(table, title="[yellow]Supplier Catalog[/yellow]", border_style="yellow")
+
+    def _create_play_area_panel(self, play_area: list) -> Panel:
+        """Panel showing cards played this turn."""
+        table = Table(show_header=False, box=None)
+        if not play_area:
+            table.add_row(Text("(Empty)", style="dim"))
+        else:
+            for card_id in play_area:
+                table.add_row(get_card_line(card_id, show_cost=False))
+        
+        return Panel(table, title="[bold]In Play[/bold]")
 
     def _create_hand_panel(self, hand: list) -> Panel:
-        hand_table = self._create_hand_table(hand)
-        return Panel(
-            hand_table, title="[bold cyan]Your Hand[/bold cyan]", border_style="cyan"
-        )
-    
-    ## NEW HELPER METHOD: Creates the table listing available moves.
-    def _create_actions_table(self, legal_moves: list) -> Table:
-        """Creates a Rich Table for the list of available actions."""
-        table = Table(title="[bold]Available Actions[/bold]", show_header=True, header_style="bold magenta", box=None)
-        table.add_column("Index", justify="center", width=5)
+        """Panel showing cards in the player's hand."""
+        table = Table(show_header=False, box=None)
+        if not hand:
+             table.add_row(Text("(Empty)", style="dim"))
+        else:
+            for card_id in hand:
+                table.add_row(get_card_line(card_id))
+        
+        return Panel(table, title="[bold cyan]Your Hand[/bold cyan]", border_style="cyan")
+
+    def _create_actions_panel(self, legal_moves: list) -> Panel:
+        """Panel listing all available, numbered actions."""
+        table = Table(show_header=True, header_style="bold magenta", box=None)
+        table.add_column("Num", justify="center", style="bold", width=5)
         table.add_column("Action", no_wrap=True)
 
         for i, move in enumerate(legal_moves, 1):
+            # move[0] is the rich-formatted Text object from phases.py
             table.add_row(f"[{i}]", move[0])
         
         if not legal_moves:
-            table.add_row(Text("(No actions available)", style="dim", justify="center"))
+            table.add_row("", Text("(No actions available)", style="dim"))
             
-        return table
-        
-    def _create_board_table(self, board: list, is_opponent=False) -> Table:
-        # This method is unchanged
-        table = Table(show_header=True, header_style="bold magenta", box=None)
-        if not is_opponent:
-            table.add_column("Status", width=7)
-        table.add_column("Card Name", style="cyan", no_wrap=True)
-        table.add_column("ATK/HP", justify="center")
+        return Panel(table, title="[bold]Available Actions[/bold]")
 
-        for i, unit in enumerate(board):
-            if unit:
-                card = CARD_DB.get(unit.card_id, {})
-                stats = f"{unit.current_attack}/{unit.current_health}"
-                if is_opponent:
-                    table.add_row(card.get('name'), stats)
-                else:
-                    status = Text("Ready", style="green") if unit.is_ready else Text("Used", style="dim")
-                    table.add_row(status, card.get('name'), stats)
-            else:
-                table.add_row(f"[{i+1}]", Text("(empty)", style="dim"))
-        return table
+    # --- User Input and Game Over Handling ---
 
-    def _create_hand_table(self, hand: list) -> Table:
-        # This method is unchanged
-        table = Table(show_header=True, header_style="bold magenta", box=None)
-        table.add_column("Index", justify="center", width=5)
-        table.add_column("Card", style="cyan", no_wrap=True)
-        
-        for i, card_id in enumerate(hand):
-            table.add_row(f"[{i+1}]", get_card_line(card_id))
-        
-        if not hand:
-            table.add_row(Text("(empty)", style="dim", justify="center"))
-            
-        return table
-
-    ## MODIFIED: Major refactor to handle indexed input.
     def _handle_command(self, command_str: str, legal_moves: list):
         """Parses a command and executes it."""
         if command_str == "quit":
@@ -178,31 +170,27 @@ class GameUI:
             input("Press Enter to continue...")
             return
 
-        # Try to process the command as a move index
         try:
             move_idx = int(command_str)
-            # Check if the number is in the valid range of moves
             if 1 <= move_idx <= len(legal_moves):
-                # Retrieve the move (adjusting for zero-based index)
                 found_move = legal_moves[move_idx - 1]
                 self.controller.process_action(found_move)
             else:
-                # Number was valid, but out of range
-                self.console.print(f"[bold red]Error: '{move_idx}' is not a valid move index.[/bold red]")
+                self.console.print(f"[bold red]Error: '{move_idx}' is not a valid action number.[/bold red]")
                 time.sleep(1.5)
         except ValueError:
-            # The input was not a number
             self.console.print(f"[bold red]Invalid command: '{command_str}'. Please enter a number.[/bold red]")
             time.sleep(1.5)
 
     def _handle_game_over(self):
-        # This method is unchanged
-        winner_idx = self.controller.game_state.get_winner()
-        winner_name = self.controller.game_state.players[winner_idx].name if winner_idx is not None else "DRAW"
-        self.console.print(Rule(f"[bold magenta]GAME OVER! Winner: {winner_name}[/bold magenta]"))
+        final_score = self.controller.game_state.victory_points
+        self.console.print(Rule(f"[bold magenta]GAME OVER! Final Prestige: {final_score}[/bold magenta]"))
         
         completer = WordCompleter(["reset", "quit"], ignore_case=True)
         command = self.session.prompt("> Type 'reset' or 'quit': ", completer=completer)
         
         if command.lower() == 'reset':
             self.controller.reset_game()
+        else:
+            # We raise EOFError to signal the main loop to exit
+            raise EOFError

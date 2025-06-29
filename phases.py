@@ -1,15 +1,13 @@
-from card_database import CARD_DB
+# phases.py (Completely Rewritten for the Single-Player Deckbuilder)
+
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
-from game_state import GameState, UnitState, UnitCombatStatus
-from shared import *
-import random
+from card_database import CARD_DB, get_card_line # Assuming you have a helper for formatted card text
+
 if TYPE_CHECKING:
     from game_state import GameState
 
-from rich import print
-
-# --- Base Class ---
+# --- Base Class (Unchanged) ---
 class Phase(ABC):
     """An abstract base class for a phase in the game."""
     
@@ -19,220 +17,139 @@ class Phase(ABC):
         pass
     
     @abstractmethod
-    def get_legal_moves(self, state) -> list:
-        """Generates all legal moves for the current player in this phase."""
+    def get_legal_moves(self, state: 'GameState') -> list:
+        """Generates all legal moves for the player in this phase."""
         pass
 
     @abstractmethod
-    def process_action(self, state, action: tuple) -> 'Phase':
+    def process_action(self, state: 'GameState', action: tuple) -> 'Phase':
         """Processes an action and returns the next phase of the game."""
         pass
 
-    def on_enter(self, state):
+    def on_enter(self, state: 'GameState'):
         """Optional: Code to run when the game enters this phase."""
         pass
 
-# --- Concrete Phase Implementations ---
-
-class UpkeepPhase(Phase):
-    """A phase that runs automatically and transitions immediately."""
-    def get_name(self): return "Upkeep"
-    
-    def get_legal_moves(self, state) -> list:
-        # No player decisions are made in this phase.
-        return []
-
-    def on_enter(self, state):
-        """This phase's logic runs automatically upon entry."""
-        
-        state.turn_number += 1
-        state.current_player_index = (state.current_player_index+1)%len(state.players)
-        player = state.players[state.current_player_index]
-        
-        player.resource = min(10, player.resource+1)
-        
-        for unit in player.board: 
-            if unit:
-                unit.is_ready = True
-                
-        for i in state.players:        
-            while i.deck and len(i.hand) < MAX_HAND_SIZE:
-                i.draw_card()
-        state.current_phase = MainPhase()
-        state.current_phase.on_enter(state)
-
-    def process_action(self, state, action: tuple) -> 'Phase':
-        # Should never be called, as there are no legal moves.
-        raise Exception("Cannot process action in an automatic phase.")
-
+# --- Concrete Phase Implementations for the Deckbuilder ---
 
 class MainPhase(Phase):
-    def get_name(self): return "Main"
-    
-    def get_legal_moves(self, state) -> list:
-        # This is your familiar "Develop or Deploy" logic
-        playable = set()
+    """
+    The primary, interactive phase where the player plays cards and buys cards.
+    """
+    def get_name(self) -> str:
+        return "Main Phase"
+
+    def get_legal_moves(self, state: 'GameState') -> list:
+        """Generates all possible moves: playing, buying, and ending the turn."""
         legal_moves = []
-        player = state.players[state.current_player_index]
-        opponent = state.players[1-state.current_player_index]
-        first_slot = -1
-        for hand_idx, card_id in enumerate(player.hand):
-            if card_id in playable:
-                continue
+
+        # 1. Generate moves for playing cards from hand
+        for hand_idx, card_id in enumerate(state.hand):
+            # In this model, we assume any card in hand is playable.
+            # You could add a check here for card types if some weren't playable.
+            card_line = get_card_line(card_id) # e.g., "[Artisanal Beans] Cost: 3 - +$2"
+            desc = f"Play [green]{card_line}[/green]"
+            legal_moves.append((desc, 'PLAY_CARD', hand_idx))
+
+        # 2. Generate moves for buying cards from the supply
+        for supply_idx, card_id in enumerate(state.supply):
             card_info = CARD_DB[card_id]
-            if player.resource >= card_info['cost']:
-                if (card_info['type'] == 'UNIT'):
-                    # KEY CHANGE: Generate a move for EACH empty slot
-                    playable.add(card_id)
-                    name = card_info["name"]
-                    desc = f"Play [green]{name}[/green]"
-                    legal_moves.append((desc,'PLAY_UNIT', hand_idx))
-                elif card_info['type'] == 'ACTION':
-                    playable.add(card_id)
-                    name = card_info["name"]
-                    desc = f"Play [green]{name}[/green]"
-                    legal_moves.append((desc,'PLAY_ACTION', hand_idx))
-             
-        legal_moves.append(("Pass",'PASS', ))
+            if state.resource_primary >= card_info['cost']:
+                card_line = get_card_line(card_id)
+                desc = f"Buy [cyan]{card_line}[/cyan]"
+                legal_moves.append((desc, 'BUY_CARD', supply_idx))
+        
+        # 3. (Optional) Generate moves for buying from staples
+        # for staple_id in state.staples:
+        #     card_info = CARD_DB[staple_id]
+        #     if state.resource_primary >= card_info['cost']:
+        #         # ... add buy move for staples ...
+        
+        # 4. Add the move to end the turn
+        legal_moves.append(("End Turn", 'END_TURN'))
         
         return legal_moves
 
-    def process_action(self, state, action: tuple) -> 'Phase':
-        """
-        Processes a main phase action, then transitions to the next player's turn.
-        """
-        # --- 1. Apply the specific effect of the chosen action ---
-        
+    def process_action(self, state: 'GameState', action: tuple) -> 'Phase':
+        """Processes a play, buy, or end_turn action."""
         action_type = action[1]
-        player = state.players[state.current_player_index]
-        opponent = state.players[1-state.current_player_index]
-        if action_type == 'PLAY_UNIT':
-            
-            # KEY CHANGE: Unpack the target slot index from the action
+
+        if action_type == 'PLAY_CARD':
             hand_idx = action[2]
-            card_id = player.hand.pop(hand_idx)
+            card_id = state.hand.pop(hand_idx)
+            state.play_area.append(card_id)
+            
+            # Delegate effect resolution to the GameState
+            state.eval_effects(card_id)
+            
+            # Stay in the MainPhase to continue the turn
+            return self
+
+        elif action_type == 'BUY_CARD':
+            supply_idx = action[2]
+            card_id = state.supply[supply_idx]
             card_info = CARD_DB[card_id]
-            player.resource -= card_info['cost']
-            eff = card_info.get("effects", [])
-            if eff:
-                state.eval_effects(eff, card_id)
-            unit = UnitState(
-                card_id=card_id,
-                current_attack=card_info['attack'],
-                current_health=card_info['health'],
-                is_ready=False,
-                keywords = card_info["keywords"]
-            )
-            # KEY CHANGE: Place the unit in the specified slot
-            player.board.append(unit)
-        elif action_type == 'PLAY_ACTION':
-            ind = action[2]
-            
-            # --- VALIDATION PHASE ---
-            # 1. Validate hand index.
-            if ind >= len(player.hand):
-                raise IndexError(f"MCTS Desync: Tried to play from hand index {ind}, but hand size is {len(player.hand)}. Hand: {player.hand}")
-                
-            card_id = player.hand[ind]
-            # It's good practice to handle potential DB errors, though MCTS assumes a valid state.
-            card_info = CARD_DB.get(card_id) 
-            if not card_info:
-                raise KeyError(f"MCTS Desync: Card ID '{card_id}' not found in CARD_DB.")
-            
-            # 2. Validate resource cost.
-            if player.resource < card_info['cost']:
-                raise ValueError(f"MCTS Desync: Tried to play card {card_id} with cost {card_info['cost']}, but player only has {player.resource} resources.")
 
-            player.hand.pop(ind)
-            
-            # b. Pay cost and move to graveyard.
-            player.resource -= card_info['cost']
-            
-            player.graveyard.append(card_id)
-        
-            eff = card_info.get("effects", [])
-            if eff:
-                state.eval_effects(eff, card_id)
-        
-        elif action_type == "PASS":
-            pass
-        
-        if state.turn_number %2 == 0:
-            return CombatPhase()
-        else:
-            return UpkeepPhase()
+            # Perform the transaction
+            state.resource_primary -= card_info['cost']
+            state.discard_pile.append(card_id)
 
-class CombatPhase(Phase):
-    def get_name(self):
-        return "Combat"
-        
-    def on_enter(self, state: 'GameState'):
-        """
-        Resolves combat between players' boards.
-        This version assumes player.board is a dynamic list of UnitState objects.
-        """
-        player1 = state.players[0]
-        player2 = state.players[1]
-        
-        # --- 1. DAMAGE CALCULATION ---
-        # Determine the length of the "front line" for combat.
-        # It's the smaller of the two board sizes.
-        combat_len = min(len(player1.board), len(player2.board))
-
-        for i in range(combat_len):
-            u1 = player1.board[i]
-            u2 = player2.board[i]
-            
-            # Units deal damage to each other simultaneously.
-            u1.current_health -= u2.current_attack
-            u2.current_health -= u1.current_attack
-        
-        # Unopposed units deal damage directly to the opponent's score.
-        # Check if player 1 has more units than player 2.
-        if len(player1.board) > combat_len:
-            for i in range(combat_len, len(player1.board)):
-                player1.score += 2 # Or use a different value for direct damage
-        
-        # Check if player 2 has more units than player 1.
-        if len(player2.board) > combat_len:
-            for i in range(combat_len, len(player2.board)):
-                player2.score += 2
-
-
-        # --- 2. CLEANUP & SCORE ---
-        # We build new lists containing only the survivors.
-
-        survivors_p1 = []
-        for unit in player1.board:
-            if unit.current_health > 0:
-                survivors_p1.append(unit)
+            # Refill the supply from the supply deck
+            if state.supply_deck:
+                new_card_id = state.supply_deck.pop(0)
+                state.supply[supply_idx] = new_card_id
             else:
-                # The unit was defeated. Add to graveyard and score for opponent.
-                player1.graveyard.append(unit.card_id)
-                player2.score += 1
-        
-        survivors_p2 = []
-        for unit in player2.board:
-            if unit.current_health > 0:
-                survivors_p2.append(unit)
-            else:
-                # The unit was defeated. Add to graveyard and score for opponent.
-                player2.graveyard.append(unit.card_id)
-                player1.score += 1
+                # If the supply deck is empty, remove the slot
+                state.supply.pop(supply_idx)
 
-        # --- 3. UPDATE BOARD STATE ---
-        # Replace the old boards with the new lists of survivors.
-        player1.board = survivors_p1
-        player2.board = survivors_p2
+            # Stay in the MainPhase to continue the turn
+            return self
 
-        # --- 4. TRANSITION TO NEXT PHASE ---
-        state.current_phase = UpkeepPhase()
-        state.current_phase.on_enter(state)
+        elif action_type == 'END_TURN':
+            # Transition to the automatic CleanupPhase
+            return CleanupPhase()
         
-    def get_legal_moves(self, state) -> list:
+        # If the action wasn't recognized, something is wrong
+        raise ValueError(f"Unknown action in MainPhase: {action}")
+
+
+class CleanupPhase(Phase):
+    """
+    An automatic phase that cleans up the turn and sets up the next one.
+    This is the "engine" of the deckbuilder loop.
+    """
+    def get_name(self): 
+        return "Cleanup"
+    
+    def get_legal_moves(self, state: 'GameState') -> list:
+        # No player decisions are made in this phase.
         return []
+
+    def on_enter(self, state: 'GameState'):
+        """This phase's logic runs automatically upon entry."""
         
-    def process_action(self, state, action: tuple) -> 'Phase':
+        # 1. Move all cards from play area and hand to the discard pile.
+        state.discard_pile.extend(state.play_area)
+        state.play_area.clear()
+        
+        state.discard_pile.extend(state.hand)
+        state.hand.clear()
+
+        # 2. Reset turn-based resources.
+        state.resource_primary = 0
+        state.resource_secondary = 0
+        
+        # 3. Draw 5 new cards for the next turn.
+        for _ in range(5):
+            state.draw_card()
+            
+        # 4. Increment turn number.
+        state.turn_number += 1
+
+        # 5. Automatically transition to the next MainPhase.
+        state.current_phase = MainPhase()
+        state.current_phase.on_enter(state) # Though MainPhase.on_enter does nothing currently
+
+    def process_action(self, state: 'GameState', action: tuple) -> 'Phase':
+        # Should never be called, as there are no legal moves.
         raise Exception("Cannot process action in an automatic phase.")
-        
-        
