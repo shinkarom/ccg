@@ -102,6 +102,12 @@ class MainPhase(Phase):
             card_id = state.hand.pop(hand_idx)
             state.eval_effects(card_id)
             state.play_area.append(card_id)
+            if state.action_queue:
+                # Get the first requested action. You could handle multiple if needed.
+                next_action = state.action_queue.pop(0) 
+                if next_action[0] == 'TRASH_FROM_HAND':
+                    # Now, we are in the right place to manage the phase transition.
+                    return TrashCardPhase(origin_phase=self)
             return self
 
         elif action_type == 'BUY_CARD':
@@ -135,9 +141,6 @@ class MainPhase(Phase):
                 state._apply_effect(effect, played_card_index=play_area_idx)
             return self
 
-        elif action_type == 'TRASH_FROM_HAND':
-             return TrashCardPhase(origin_phase=self)
-
         elif action_type == 'END_TURN':
             # This action has no second element, but that's fine now.
             return CleanupPhase()
@@ -149,9 +152,10 @@ class TrashCardPhase(Phase):
     """
     A special, temporary phase entered to resolve a "trash a card" effect.
     """
-    def __init__(self, origin_phase: Phase):
+    def __init__(self, origin_phase: Phase, mandatory: bool = False):
         # We store the phase we came from so we can return to it.
         self.origin_phase = origin_phase
+        self.mandatory = mandatory
 
     def get_name(self) -> str:
         return "Trashing Card"
@@ -165,8 +169,8 @@ class TrashCardPhase(Phase):
             desc.append(card_line)
             legal_moves.append((desc, ('TRASH_CARD', i)))
         
-        # Optionally, add a "Cancel" action
-        legal_moves.append((Text("Cancel Trashing", style="bold dim"), ('CANCEL_TRASH',)))
+        if not self.mandatory:
+            legal_moves.append((Text("Cancel Trashing", style="bold dim"), ('CANCEL_TRASH',)))
         return legal_moves
 
     def process_action(self, state: 'GameState', action: tuple) -> 'Phase':
@@ -180,6 +184,12 @@ class TrashCardPhase(Phase):
         # Whether we trashed or cancelled, we return to the phase we came from.
         return self.origin_phase
 
+    def on_enter(self, state: 'GameState'):
+        # Handle the edge case where a mandatory trash is impossible.
+        if self.mandatory and not state.hand:
+            # Log a message maybe, then immediately transition back.
+            print("Mandatory trash effect triggered, but hand is empty. No action taken.")
+            state.current_phase = self.origin_phase
 
 class CleanupPhase(Phase):
     """

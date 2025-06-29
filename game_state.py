@@ -39,7 +39,7 @@ class GameState:
 
     triggered_indices: Set[int] = field(default_factory=set)
     play_area_trash_indices: Set[int] = field(default_factory=set)
-
+    action_queue: List[tuple] = field(default_factory=list)
     # --- Game Flow ---
     current_phase: "Phase" = None
 
@@ -91,7 +91,7 @@ class GameState:
                         self._apply_effect(effect)
                     break # Only need one match to trigger the bonus
 
-    def _apply_effect(self, effect: dict):
+    def _apply_effect(self, effect: dict, played_card_index = -1):
         """A helper method to apply a single, atomic effect dictionary."""
         effect_type = effect.get("type")
         value = effect.get("value", 0)
@@ -112,17 +112,7 @@ class GameState:
             else:
                 print(f"Warning: SELF_TRASH effect called without a valid index.")
         elif effect_type == "TRASH_FROM_HAND":
-            # The game state doesn't know how to ask the user which card to trash.
-            # So, we tell the current phase to handle a 'TRASH_FROM_HAND' action.
-            # We clone the state to avoid modifying it during this pseudo-action.
-            temp_state = self.clone()
-            next_phase = temp_state.current_phase.process_action(temp_state, ('TRASH_FROM_HAND', value))
-            
-            # Now, we manually update the *real* state's phase.
-            # This is a bit of a hack, but it's the cleanest way to inject a
-            # state change from within an effect resolution.
-            self.current_phase = next_phase
-        # Add more effect types here as needed (e.g., TRASH_CARD, etc.)
+            self.action_queue.append(('TRASH_FROM_HAND', value))
         else:
             print(f"Warning: Unknown effect type '{effect_type}'")
 
@@ -153,7 +143,7 @@ class GameState:
     def is_terminal(self) -> bool:
         """Checks if the game has reached a terminal state."""
         # Example win condition: reaching 50 VP
-        if self.victory_points >= 50:
+        if self.victory_points >= 10:
             return True
         # Example loss condition: supply deck is empty and supply row is empty
         if not self.supply_deck and not self.supply:
