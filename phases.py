@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 from card_database import CARD_DB, get_card_line # Assuming you have a helper for formatted card text
+from rich.text import Text
 
 if TYPE_CHECKING:
     from game_state import GameState
@@ -34,82 +35,90 @@ class Phase(ABC):
 
 class MainPhase(Phase):
     """
-    The primary, interactive phase where the player plays cards and buys cards.
+    The primary, interactive phase. Generates a single list of all legal moves.
     """
     def get_name(self) -> str:
         return "Main Phase"
 
     def get_legal_moves(self, state: 'GameState') -> list:
-        """Generates all possible moves: playing, buying, and ending the turn."""
+        """Generates a single, unified list of all possible actions."""
         legal_moves = []
 
         # 1. Generate moves for playing cards from hand
         for hand_idx, card_id in enumerate(state.hand):
-            # In this model, we assume any card in hand is playable.
-            # You could add a check here for card types if some weren't playable.
-            card_line = get_card_line(card_id) # e.g., "[Artisanal Beans] Cost: 3 - +$2"
-            desc = f"Play [green]{card_line}[/green]"
-            legal_moves.append((desc, 'PLAY_CARD', hand_idx))
+            card_line = get_card_line(card_id, show_cost=False)
+            desc = Text("Play ")
+            desc.append(card_line)
+            legal_moves.append((desc, ('PLAY_CARD', hand_idx)))
 
         # 2. Generate moves for buying cards from the supply
         for supply_idx, card_id in enumerate(state.supply):
             card_info = CARD_DB[card_id]
             if state.resource_primary >= card_info['cost']:
                 card_line = get_card_line(card_id)
-                desc = f"Buy [cyan]{card_line}[/cyan]"
-                legal_moves.append((desc, 'BUY_CARD', supply_idx))
+                desc = Text("Buy ")
+                desc.append(card_line)
+                legal_moves.append((desc, ('BUY_CARD', supply_idx)))
         
-        # 3. (Optional) Generate moves for buying from staples
-        # for staple_id in state.staples:
-        #     card_info = CARD_DB[staple_id]
-        #     if state.resource_primary >= card_info['cost']:
-        #         # ... add buy move for staples ...
-        
+        # --- THE FIX IS HERE ---
+        # 3. Generate moves for buying STAPLE cards
+        for staple_idx, card_id in enumerate(state.staples):
+            card_info = CARD_DB[card_id]
+            if state.resource_primary >= card_info['cost']:
+                card_line = get_card_line(card_id)
+                desc = Text("Buy Staple: ") # Use different text for clarity
+                desc.append(card_line)
+                # Use a new action type to distinguish from a regular supply buy
+                legal_moves.append((desc, ('BUY_STAPLE', staple_idx)))
+        # --- END FIX ---
+
         # 4. Add the move to end the turn
-        legal_moves.append(("End Turn", 'END_TURN'))
+        legal_moves.append((Text("End Turn", style="bold"), ('END_TURN',)))
         
         return legal_moves
 
     def process_action(self, state: 'GameState', action: tuple) -> 'Phase':
         """Processes a play, buy, or end_turn action."""
-        action_type = action[1]
+        action_type = action[0]
 
         if action_type == 'PLAY_CARD':
-            hand_idx = action[2]
+            hand_idx = action[1]
             card_id = state.hand.pop(hand_idx)
             state.play_area.append(card_id)
-            
-            # Delegate effect resolution to the GameState
             state.eval_effects(card_id)
-            
-            # Stay in the MainPhase to continue the turn
             return self
 
         elif action_type == 'BUY_CARD':
-            supply_idx = action[2]
+            supply_idx = action[1]
             card_id = state.supply[supply_idx]
+            card_info = CARD_DB[card_id]
+            state.resource_primary -= card_info['cost']
+            state.discard_pile.append(card_id)
+
+            if state.supply_deck:
+                new_card_id = state.supply_deck.pop(0)
+                state.supply[supply_idx] = new_card_id
+            else:
+                state.supply.pop(supply_idx)
+            return self
+
+        # --- THE FIX IS HERE ---
+        elif action_type == 'BUY_STAPLE':
+            staple_idx = action[1]
+            card_id = state.staples[staple_idx]
             card_info = CARD_DB[card_id]
 
             # Perform the transaction
             state.resource_primary -= card_info['cost']
             state.discard_pile.append(card_id)
-
-            # Refill the supply from the supply deck
-            if state.supply_deck:
-                new_card_id = state.supply_deck.pop(0)
-                state.supply[supply_idx] = new_card_id
-            else:
-                # If the supply deck is empty, remove the slot
-                state.supply.pop(supply_idx)
-
-            # Stay in the MainPhase to continue the turn
+            
+            # CRUCIALLY: Do NOT remove the staple. They are infinitely available.
             return self
+        # --- END FIX ---
 
         elif action_type == 'END_TURN':
-            # Transition to the automatic CleanupPhase
             return CleanupPhase()
         
-        # If the action wasn't recognized, something is wrong
         raise ValueError(f"Unknown action in MainPhase: {action}")
 
 

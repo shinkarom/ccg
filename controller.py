@@ -2,6 +2,7 @@
 from game_state import GameState
 import game_logic
 from deckgen import generate_quick_deck
+from card_database import CARD_DB
 
 class GameController:
     """
@@ -51,3 +52,5 @@ class GameController:
     def reset_game(self):
         """Re-initializes the game state for a "Play Again" scenario."""
         self.game_state = self._setup_game()
+        
+    def get_card_info(self, card_id): return CARD_DB[card_id]

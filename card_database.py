@@ -32,10 +32,7 @@ CARD_DB = load_card_database("card_database.json")
 
 def get_card_line(card_id: str, show_cost: bool = True) -> Text:
     """
-    Generates a single, rich-formatted line representing a card.
-    Perfect for lists in the UI (hand, supply, etc.).
-    
-    Example Output: [Artisanal Beans] (Cost: 3) - +$2. Synergy: +1 Buzz.
+    Generates a single, rich-formatted line representing a card with uniform styling.
     """
     if card_id not in CARD_DB:
         return Text(f"Unknown Card ID: {card_id}", style="bold red")
@@ -44,19 +41,15 @@ def get_card_line(card_id: str, show_cost: bool = True) -> Text:
     name = info.get("name", "Unnamed Card")
     cost = info.get("cost", 0)
     text = info.get("text", "")
-    tag = info.get("tag", "None")
 
     # Start building the Rich Text object
     card_text = Text()
     
-    # Add name with style based on tag
-    tag_style_map = {
-        "INGREDIENT": "green",
-        "EQUIPMENT": "cyan",
-        "STAFF": "magenta",
-        "None": "white"
-    }
-    card_text.append(f"[{name}]", style=tag_style_map.get(tag, "white"))
+    # --- THE CHANGE IS HERE ---
+    # Apply a single, consistent style to all card names.
+    # No more color-coding by tag. "bold white" is a great neutral choice.
+    card_text.append(f"[{name}]", style="bold white")
+    # --- END CHANGE ---
 
     # Add cost
     if show_cost:
