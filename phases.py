@@ -152,10 +152,11 @@ class TrashCardPhase(Phase):
     """
     A special, temporary phase entered to resolve a "trash a card" effect.
     """
-    def __init__(self, origin_phase: Phase, mandatory: bool = False):
+    def __init__(self, origin_phase: Phase,, count: int = 1, mandatory: bool = False):
         # We store the phase we came from so we can return to it.
         self.origin_phase = origin_phase
         self.mandatory = mandatory
+        self.remaining_trashes = count
 
     def get_name(self) -> str:
         return "Trashing Card"
@@ -180,9 +181,14 @@ class TrashCardPhase(Phase):
             # Move the chosen card from hand to the trash pile
             card_to_trash = state.hand.pop(idx)
             state.trash_pile.append(card_to_trash)
+            self.remaining_trashes -= 1
         
-        # Whether we trashed or cancelled, we return to the phase we came from.
-        return self.origin_phase
+        if self.remaining_trashes > 0 and state.hand:
+            # If we still need to trash more cards, we stay in this phase.
+            return self 
+        else:
+            # Otherwise, we're done. Return to the origin.
+            return self.origin_phase
 
     def on_enter(self, state: 'GameState'):
         # Handle the edge case where a mandatory trash is impossible.
