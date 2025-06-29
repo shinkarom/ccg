@@ -5,7 +5,7 @@ import random
 from dataclasses import dataclass, field
 from typing import List, TYPE_CHECKING
 from card_database import CARD_DB
-
+from typing import List, Set
 if TYPE_CHECKING:
     from phases import Phase
 
@@ -31,11 +31,13 @@ class GameState:
     hand: List[str] = field(default_factory=list)
     discard_pile: List[str] = field(default_factory=list)
     play_area: List[str] = field(default_factory=list)
-    
+    trash_pile: List[str] = field(default_factory=list)
     # --- Supply (The Market) ---
     supply: List[str] = field(default_factory=list)
     supply_deck: List[str] = field(default_factory=list)
     staples: List[str] = field(default_factory=list)
+
+    triggered_indices: Set[int] = field(default_factory=set)
 
     # --- Game Flow ---
     current_phase: "Phase" = None
@@ -102,6 +104,17 @@ class GameState:
         elif effect_type == "DRAW_CARDS":
             for _ in range(value):
                 self.draw_card()
+        elif effect_type == "TRASH_FROM_HAND":
+            # The game state doesn't know how to ask the user which card to trash.
+            # So, we tell the current phase to handle a 'TRASH_FROM_HAND' action.
+            # We clone the state to avoid modifying it during this pseudo-action.
+            temp_state = self.clone()
+            next_phase = temp_state.current_phase.process_action(temp_state, ('TRASH_FROM_HAND', value))
+            
+            # Now, we manually update the *real* state's phase.
+            # This is a bit of a hack, but it's the cleanest way to inject a
+            # state change from within an effect resolution.
+            self.current_phase = next_phase
         # Add more effect types here as needed (e.g., TRASH_CARD, etc.)
         else:
             print(f"Warning: Unknown effect type '{effect_type}'")

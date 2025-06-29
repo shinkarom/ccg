@@ -54,7 +54,7 @@ class GameUI:
     def _display_game_state(self, legal_moves: list):
         """Renders the game state as a simple vertical list of panels."""
         state = self.controller.game_state
-
+        phase_name = state.current_phase.get_name()
         # --- Create all UI panels ---
         status_panel = self._create_status_panel(state)
         supply_panel = self._create_supply_panel(state)
@@ -63,7 +63,7 @@ class GameUI:
         actions_panel = self._create_actions_panel(legal_moves)
 
         # --- Print panels one after another in a logical order ---
-        self.console.print(Rule(f"[bold]Coffee Shop Magnate - Day {state.turn_number}[/bold]"))
+        self.console.print(Rule(f"[bold]Coffee Shop Magnate - Day {state.turn_number} - {phase_name}[/bold]"))
         self.console.print(status_panel)
         self.console.print(supply_panel)
         self.console.print(hand_panel) # Display the hand panel

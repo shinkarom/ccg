@@ -100,16 +100,14 @@
       ]
     }
   },
-  "105": {
-    "id": "105",
-    "name": "Part-Time Helper",
-    "tag": "STAFF",
-    "cost": 2,
-    "text": "+1 Card, +1 Action (Placeholder - not implemented).",
-    "primary_ability": [
-      { "type": "DRAW_CARDS", "value": 1 }
-    ]
-  },
+	"105": {
+		"name": "Part-Time Helper",
+		"text": "+1 Card, +$1.",
+		"primary_ability": [
+		  { "type": "DRAW_CARDS", "value": 1 },
+		  { "type": "ADD_RESOURCE_PRIMARY", "value": 1 }
+		]
+	}
   "106": {
     "id": "106",
     "name": "Marketing Campaign",

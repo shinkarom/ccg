@@ -70,7 +70,22 @@ class MainPhase(Phase):
                 desc.append(card_line)
                 # Use a new action type to distinguish from a regular supply buy
                 legal_moves.append((desc, ('BUY_STAPLE', staple_idx)))
-        # --- END FIX ---
+        
+        for i, card_id in enumerate(state.play_area):
+            # Check if this card's trigger has already been used this turn
+            if i in state.triggered_indices:
+                continue
+
+            card_info = CARD_DB[card_id]
+            trigger_info = card_info.get("trigger_ability")
+            
+            # Check if the card has a trigger and if we can afford it
+            if trigger_info and state.resource_secondary >= trigger_info['cost_value']:
+                card_name = card_info['name']
+                cost = trigger_info['cost_value']
+                # Create a clear description for the UI
+                desc = Text(f"Trigger {card_name} (Cost: {cost} Buzz)")
+                legal_moves.append((desc, ('TRIGGER_ABILITY', i)))
 
         # 4. Add the move to end the turn
         legal_moves.append((Text("End Turn", style="bold"), ('END_TURN',)))
@@ -81,12 +96,22 @@ class MainPhase(Phase):
         """Processes a play, buy, or end_turn action."""
         action_type = action[0]
 
-        if action_type == 'PLAY_CARD':
+        if action_type == 'TRASH_FROM_HAND':
+            # Instead of resolving here, we transition to the special phase.
+            # We pass 'self' (the current MainPhase instance) so it knows where to return.
+            return TrashCardPhase(origin_phase=self)
+
+        elif action_type == 'PLAY_CARD':
+            # 1. Remove from hand
             hand_idx = action[1]
             card_id = state.hand.pop(hand_idx)
-            state.play_area.append(card_id)
+
+            # 2. Evaluate effects (this is where Synergy check happens)
+            # The engine looks at what's *already* in the play_area.
             state.eval_effects(card_id)
-            return self
+
+            # 3. NOW add the card to the play_area for future checks.
+            state.play_area.append(card_id)
 
         elif action_type == 'BUY_CARD':
             supply_idx = action[1]
@@ -116,10 +141,63 @@ class MainPhase(Phase):
             return self
         # --- END FIX ---
 
+        elif action_type == 'TRIGGER_ABILITY':
+            play_area_idx = action[1]
+            card_id = state.play_area[play_area_idx]
+            card_info = CARD_DB[card_id]
+            trigger_info = card_info["trigger_ability"]
+
+            # 1. Pay the cost
+            state.resource_secondary -= trigger_info['cost_value']
+
+            # 2. Mark this ability as used for the turn
+            state.triggered_indices.add(play_area_idx)
+
+            # 3. Apply the effects
+            for effect in trigger_info["effects"]:
+                state._apply_effect(effect) # Reuse your existing effect handler!
+            
+            return self # Stay in the main phase
+
         elif action_type == 'END_TURN':
             return CleanupPhase()
         
         raise ValueError(f"Unknown action in MainPhase: {action}")
+
+class TrashCardPhase(Phase):
+    """
+    A special, temporary phase entered to resolve a "trash a card" effect.
+    """
+    def __init__(self, origin_phase: Phase):
+        # We store the phase we came from so we can return to it.
+        self.origin_phase = origin_phase
+
+    def get_name(self) -> str:
+        return "Trashing Card"
+
+    def get_legal_moves(self, state: 'GameState') -> list:
+        """The only legal moves are choosing a card from hand to trash."""
+        legal_moves = []
+        for i, card_id in enumerate(state.hand):
+            card_line = get_card_line(card_id, show_cost=False)
+            desc = Text("Trash ")
+            desc.append(card_line)
+            legal_moves.append((desc, ('TRASH_CARD', i)))
+        
+        # Optionally, add a "Cancel" action
+        legal_moves.append((Text("Cancel Trashing", style="bold dim"), ('CANCEL_TRASH',)))
+        return legal_moves
+
+    def process_action(self, state: 'GameState', action: tuple) -> 'Phase':
+        action_type, idx = action[0], action[1] if len(action) > 1 else None
+
+        if action_type == 'TRASH_CARD':
+            # Move the chosen card from hand to the trash pile
+            card_to_trash = state.hand.pop(idx)
+            state.trash_pile.append(card_to_trash)
+        
+        # Whether we trashed or cancelled, we return to the phase we came from.
+        return self.origin_phase
 
 
 class CleanupPhase(Phase):
@@ -143,7 +221,9 @@ class CleanupPhase(Phase):
         
         state.discard_pile.extend(state.hand)
         state.hand.clear()
-
+        
+        state.triggered_indices.clear()
+        
         # 2. Reset turn-based resources.
         state.resource_primary = 0
         state.resource_secondary = 0
