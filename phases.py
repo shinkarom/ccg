@@ -88,30 +88,21 @@ class MainPhase(Phase):
                 legal_moves.append((desc, ('TRIGGER_ABILITY', i)))
 
         # 4. Add the move to end the turn
-        legal_moves.append((Text("End Turn", style="bold"), ('END_TURN',)))
+        legal_moves.append((Text("End Turn", style="bold"), ('END_TURN', None)))
         
         return legal_moves
 
     def process_action(self, state: 'GameState', action: tuple) -> 'Phase':
         """Processes a play, buy, or end_turn action."""
+        # This is a much safer way to handle the action tuple.
         action_type = action[0]
 
-        if action_type == 'TRASH_FROM_HAND':
-            # Instead of resolving here, we transition to the special phase.
-            # We pass 'self' (the current MainPhase instance) so it knows where to return.
-            return TrashCardPhase(origin_phase=self)
-
-        elif action_type == 'PLAY_CARD':
-            # 1. Remove from hand
+        if action_type == 'PLAY_CARD':
             hand_idx = action[1]
             card_id = state.hand.pop(hand_idx)
-
-            # 2. Evaluate effects (this is where Synergy check happens)
-            # The engine looks at what's *already* in the play_area.
             state.eval_effects(card_id)
-
-            # 3. NOW add the card to the play_area for future checks.
             state.play_area.append(card_id)
+            return self
 
         elif action_type == 'BUY_CARD':
             supply_idx = action[1]
@@ -119,50 +110,40 @@ class MainPhase(Phase):
             card_info = CARD_DB[card_id]
             state.resource_primary -= card_info['cost']
             state.discard_pile.append(card_id)
-
             if state.supply_deck:
-                new_card_id = state.supply_deck.pop(0)
-                state.supply[supply_idx] = new_card_id
+                state.supply[supply_idx] = state.supply_deck.pop(0)
             else:
                 state.supply.pop(supply_idx)
             return self
 
-        # --- THE FIX IS HERE ---
         elif action_type == 'BUY_STAPLE':
             staple_idx = action[1]
             card_id = state.staples[staple_idx]
             card_info = CARD_DB[card_id]
-
-            # Perform the transaction
             state.resource_primary -= card_info['cost']
             state.discard_pile.append(card_id)
-            
-            # CRUCIALLY: Do NOT remove the staple. They are infinitely available.
             return self
-        # --- END FIX ---
-
+            
         elif action_type == 'TRIGGER_ABILITY':
             play_area_idx = action[1]
             card_id = state.play_area[play_area_idx]
             card_info = CARD_DB[card_id]
             trigger_info = card_info["trigger_ability"]
-
-            # 1. Pay the cost
             state.resource_secondary -= trigger_info['cost_value']
-
-            # 2. Mark this ability as used for the turn
             state.triggered_indices.add(play_area_idx)
-
-            # 3. Apply the effects
             for effect in trigger_info["effects"]:
-                state._apply_effect(effect) # Reuse your existing effect handler!
-            
-            return self # Stay in the main phase
+                state._apply_effect(effect, played_card_index=play_area_idx)
+            return self
+
+        elif action_type == 'TRASH_FROM_HAND':
+             return TrashCardPhase(origin_phase=self)
 
         elif action_type == 'END_TURN':
+            # This action has no second element, but that's fine now.
             return CleanupPhase()
         
-        raise ValueError(f"Unknown action in MainPhase: {action}")
+        # This will only be reached if an unknown action type is passed.
+        raise ValueError(f"Unknown action type in MainPhase: {action_type}")
 
 class TrashCardPhase(Phase):
     """
@@ -214,6 +195,15 @@ class CleanupPhase(Phase):
 
     def on_enter(self, state: 'GameState'):
         """This phase's logic runs automatically upon entry."""
+        
+        new_play_area = []
+        # Sort indices in reverse to avoid messing up subsequent indices when popping.
+        indices_to_trash = sorted(list(state.play_area_trash_indices), reverse=True)
+
+        for i in indices_to_trash:
+            # Pop the card from its index and add it to the trash pile.
+            trashed_card = state.play_area.pop(i)
+            state.trash_pile.append(trashed_card)
         
         # 1. Move all cards from play area and hand to the discard pile.
         state.discard_pile.extend(state.play_area)

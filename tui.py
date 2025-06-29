@@ -194,14 +194,21 @@ class GameUI:
             self._show_pile(self.controller.game_state.discard_pile, "Discard Pile")
             return
         # --- END NEW LOGIC ---
-
         # --- Handle numbered actions as before ---
         try:
-            move_idx = int(command_str) - 1
-            if 0 <= move_idx < len(legal_moves):
-                found_move_tuple = legal_moves[move_idx][1]
-                self.controller.process_action(found_move_tuple)
+            # 1. Convert input to a 0-based index
+            move_index = int(command_str) - 1
+            # 2. Check if the index is valid for the list
+            if 0 <= move_index < len(legal_moves):
+                # 3. Get the chosen move tuple, e.g., (<Text>, ('PLAY_CARD', 0))
+                chosen_move = legal_moves[move_index]
+                # 4. Extract the action part, e.g., ('PLAY_CARD', 0)
+                action_tuple = chosen_move[1]
+                
+                # 5. Send ONLY the action tuple to the controller
+                self.controller.process_action(action_tuple)
             else:
+                # The number was out of range (e.g., typing "99")
                 self.console.print(f"[bold red]Error: '{command_str}' is not a valid action number.[/bold red]")
                 time.sleep(1.5)
         except (ValueError, IndexError):

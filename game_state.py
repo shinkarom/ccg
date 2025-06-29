@@ -38,6 +38,7 @@ class GameState:
     staples: List[str] = field(default_factory=list)
 
     triggered_indices: Set[int] = field(default_factory=set)
+    play_area_trash_indices: Set[int] = field(default_factory=set)
 
     # --- Game Flow ---
     current_phase: "Phase" = None
@@ -104,6 +105,12 @@ class GameState:
         elif effect_type == "DRAW_CARDS":
             for _ in range(value):
                 self.draw_card()
+        elif effect_type == "SELF_TRASH":
+            # This effect can only happen from a card in play.
+            if played_card_index != -1:
+                self.play_area_trash_indices.add(played_card_index)
+            else:
+                print(f"Warning: SELF_TRASH effect called without a valid index.")
         elif effect_type == "TRASH_FROM_HAND":
             # The game state doesn't know how to ask the user which card to trash.
             # So, we tell the current phase to handle a 'TRASH_FROM_HAND' action.

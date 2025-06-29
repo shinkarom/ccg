@@ -100,14 +100,17 @@
       ]
     }
   },
-	"105": {
-		"name": "Part-Time Helper",
-		"text": "+1 Card, +$1.",
-		"primary_ability": [
-		  { "type": "DRAW_CARDS", "value": 1 },
-		  { "type": "ADD_RESOURCE_PRIMARY", "value": 1 }
-		]
-	}
+  "105": {
+    "id": "105",
+    "name": "Part-Time Helper",
+    "tag": "STAFF",
+    "cost": 2,
+    "text": "+1 Card, +$1.",
+    "primary_ability": [
+      { "type": "DRAW_CARDS", "value": 1 },
+      { "type": "ADD_RESOURCE_PRIMARY", "value": 1 }
+    ]
+  },
   "106": {
     "id": "106",
     "name": "Marketing Campaign",
@@ -125,6 +128,63 @@
       ]
     }
   },
+  "107": {
+    "id": "107",
+    "name": "Organic Milk",
+    "tag": "INGREDIENT",
+    "cost": 2,
+    "text": "+1 Buzz. Synergy: +$2.",
+    "primary_ability": [
+      { "type": "ADD_RESOURCE_SECONDARY", "value": 1 }
+    ],
+    "tag_bonus": {
+      "effects": [
+        { "type": "ADD_RESOURCE_PRIMARY", "value": 2 }
+      ]
+    }
+  },
+  "108": {
+    "id": "108",
+    "name": "Shift Manager",
+    "tag": "STAFF",
+    "cost": 4,
+    "text": "Draw 2 cards. Synergy: +1 Buzz.",
+    "primary_ability": [
+      { "type": "DRAW_CARDS", "value": 2 }
+    ],
+    "tag_bonus": {
+      "effects": [
+        { "type": "ADD_RESOURCE_SECONDARY", "value": 1 }
+      ]
+    }
+  },
+  "109": {
+    "id": "109",
+    "name": "Drive-Thru Window",
+    "tag": "EQUIPMENT",
+    "cost": 5,
+    "text": "+$2, +1 Prestige Point.",
+    "primary_ability": [
+      { "type": "ADD_RESOURCE_PRIMARY", "value": 2 },
+      { "type": "ADD_VICTORY_POINTS", "value": 1 }
+    ]
+  },
+  "110": {
+    "id": "110",
+    "name": "Investment",
+    "tag": "None",
+    "cost": 5,
+    "text": "Trigger: Trash this card from play to gain $7.",
+    "trigger_ability": {
+      "cost_type": "None",
+      "cost_value": 0,
+      "effects": [
+        { "type": "SELF_TRASH" }, 
+        { "type": "ADD_RESOURCE_PRIMARY", "value": 7 }
+      ]
+    }
+  },
+  
   "201": {
     "id": "201",
     "name": "Gourmet Pastries",
@@ -151,5 +211,43 @@
             { "type": "TRASH_FROM_HAND", "value": 1 }
         ]
     }
+  },
+  "203": {
+    "id": "203",
+    "name": "Regular Patron",
+    "tag": "None",
+    "cost": 4,
+    "text": "+1 Prestige Point, +1 Buzz.",
+    "primary_ability": [
+      { "type": "ADD_VICTORY_POINTS", "value": 1 },
+      { "type": "ADD_RESOURCE_SECONDARY", "value": 1 }
+    ]
+  },
+  "204": {
+    "id": "204",
+    "name": "Efficiency Training",
+    "tag": "STAFF",
+    "cost": 3,
+    "text": "+$1. Trigger: You may trash a card from your hand.",
+    "primary_ability": [
+      { "type": "ADD_RESOURCE_PRIMARY", "value": 1 }
+    ],
+    "trigger_ability": {
+      "cost_type": "None",
+      "cost_value": 0,
+      "effects": [
+        { "type": "TRASH_FROM_HAND", "value": 1 }
+      ]
+    }
+  },
+  "205": {
+    "id": "205",
+    "name": "Franchise Opportunity",
+    "tag": "None",
+    "cost": 8,
+    "text": "+4 Prestige Points.",
+    "primary_ability": [
+      { "type": "ADD_VICTORY_POINTS", "value": 4 }
+    ]
   }
 }
